@@ -466,14 +466,18 @@ class ConfirmarOuFecharView(discord.ui.View):
             return
 
         membro = interaction.guild.get_member(self.user_id)
+        if not membro:
+            await interaction.response.send_message("❌ Membro não encontrado.", ephemeral=True)
+            return
 
+        # Atualiza apelido
         novo_apelido = f"#{dados['passaporte']} | {dados['nome']}"
-
         try:
             await membro.edit(nick=novo_apelido)
         except:
             pass
 
+        # Remove novato e adiciona cargos
         novato = interaction.guild.get_role(CARGO_NOVATO_ID)
         if novato in membro.roles:
             await membro.remove_roles(novato)
@@ -484,13 +488,7 @@ class ConfirmarOuFecharView(discord.ui.View):
         )
 
         await interaction.response.send_message("✅ SET confirmado e cargos atribuídos.", ephemeral=True)
-
-        await membro.add_roles(
-            interaction.guild.get_role(dados['patente_id']),
-            interaction.guild.get_role(CARGO_ROTA_ID)
-        )
-
-        await interaction.response.send_message("✅ SET confirmado e cargos atribuídos.", ephemeral=True)
+eral=True)
 
 # ====================== INÍCIO ======================
 
