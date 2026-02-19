@@ -558,11 +558,14 @@ async def on_ready():
             embed = Embed(
                 title="ROTA | Solicitar Funcional",
                 description=(
-                    "Clique no botão abaixo para iniciar sua solicitação.\n"
-                    "Regras:\n"
-                    "• Apenas nomes REGISTRAVEIS\n"
-                    "• Após a solicitação AGUARDE\n"
-                    "• Apenas maiores de 18 anos"
+                    "Clique no botão abaixo para iniciar sua solicitação.\n\n"
+                    "Regras:\n\n"
+                    "• Apenas nomes **REGISTRAVEIS**\n"
+                    "• Após a solicitação **AGUARDE**\n"
+                    "• Apenas maiores de 18 anos\n\n"
+                    "Qualquer duvida chamar <#1473875232430227497>\n\n"
+                    "_Dignidade acima de tudo_\n"
+                    "_A Rota é reservada aos heróis_\n"
                 ),
                 color=discord.Color.dark_gray()
             )
