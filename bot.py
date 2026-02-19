@@ -6,7 +6,7 @@ import asyncio
 import os
 import aiohttp
 import io
-from datetime import datetime
+from datetime import datetime   
 
 
 intents = discord.Intents.all()
@@ -282,20 +282,20 @@ async def adv(interaction: discord.Interaction, membro: discord.Member, motivo: 
         try:
             await membro.remove_roles(adv3)
             await membro.add_roles(banido)
-            msg = "🚫 4ª advertência → BANIDO"
+            msg = "🚫 3ª advertência → BANIDO"
         except Exception:
             return await interaction.response.send_message("❌ Erro ao atualizar cargos.", ephemeral=True)
     elif adv2 in membro.roles:
         await membro.remove_roles(adv2)
         await membro.add_roles(adv3)
-        msg = "⚠ 3ª advertência aplicada!"
+        msg = "⚠ 2ª advertência aplicada!"
     elif adv1 in membro.roles:
         await membro.remove_roles(adv1)
         await membro.add_roles(adv2)
-        msg = "⚠ 2ª advertência aplicada!"
+        msg = "⚠ 1ª advertência aplicada!"
     else:
         await membro.add_roles(adv1)
-        msg = "⚠ 1ª advertência aplicada!"
+        msg = "⚠ advertência verbal aplicada!"
 
     await interaction.response.send_message(msg, ephemeral=True)
 
@@ -370,7 +370,11 @@ solicitacoes_abertas = {}
 # ================= TICKET =================
 
 class TicketView(View):
-    @discord.ui.button(label="Solicitar Funcional", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(
+    label="Solicitar Funcional",
+    style=discord.ButtonStyle.secondary,
+    custom_id="rota_solicitar_funcional"
+)
     async def abrir_ticket(self, interaction: discord.Interaction, button: Button):
 
         if interaction.user.id in solicitacoes_abertas:
@@ -463,35 +467,26 @@ class DadosPessoaisModal(Modal, title="Dados ROTA"):
 
         await interaction.followup.send("✅ Solicitação enviada para avaliação.", ephemeral=True)
 
-
-
-
-
 # ================= CONFIRMAR =================
 
-class ConfirmarOuFecharView(View):
+class ConfirmarOuFecharView(discord.ui.View):
     def __init__(self, user_id):
         super().__init__(timeout=None)
         self.user_id = user_id
 
-    @discord.ui.button(label="✅ Confirmar SET", style=discord.ButtonStyle.success)
-    async def confirmar(self, interaction: discord.Interaction, button: Button):
-
+    @discord.ui.button(
+        label="✅ Confirmar SET",
+        style=discord.ButtonStyle.success,
+        custom_id="confirmar_set"
+    )
+    async def confirmar(self, interaction: discord.Interaction, button: discord.ui.Button):
         dados = solicitacoes_abertas.pop(self.user_id, None)
+
         if not dados:
-            await interaction.response.send_message(
-                "❌ Solicitação não encontrada.",
-                ephemeral=True
-            )
+            await interaction.response.send_message("❌ Solicitação não encontrada.", ephemeral=True)
             return
 
         membro = interaction.guild.get_member(self.user_id)
-        if not membro:
-            await interaction.response.send_message(
-                "❌ Membro não encontrado.",
-                ephemeral=True
-            )
-            return
 
         novo_apelido = f"#{dados['passaporte']} | {dados['nome']}"
 
@@ -501,7 +496,7 @@ class ConfirmarOuFecharView(View):
             pass
 
         novato = interaction.guild.get_role(CARGO_NOVATO_ID)
-        if novato and novato in membro.roles:
+        if novato in membro.roles:
             await membro.remove_roles(novato)
 
         await membro.add_roles(
@@ -527,9 +522,17 @@ class ConfirmarOuFecharView(View):
             await asyncio.sleep(5)
             await canal.delete()
 
-    @discord.ui.button(label="❌ Cancelar", style=discord.ButtonStyle.danger)
-    async def cancelar(self, interaction: discord.Interaction, button: Button):
+    @discord.ui.button(
+        label="❌ Cancelar",
+        style=discord.ButtonStyle.danger,
+        custom_id="cancelar_set"
+    )
+    async def cancelar(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(CancelarModal(self.user_id))
+
+
+        await interaction.response.defer(ephemeral=True)
+
 
 class CancelarModal(discord.ui.Modal, title="Cancelar Solicitação"):
 
@@ -546,11 +549,20 @@ class CancelarModal(discord.ui.Modal, title="Cancelar Solicitação"):
 
     async def on_submit(self, interaction: discord.Interaction):
 
-        dados = solicitacoes_abertas.pop(self.user_id, None)
+        dados = solicitacoes_abertas.get(self.user_id)
 
         if not dados:
             await interaction.response.send_message(
-                "❌ Solicitação não encontrada.",
+                "❌ Solicitação não encontrada (bot reiniciou).",
+                ephemeral=True
+            )
+            return
+
+        solicitacoes_abertas.pop(self.user_id, None)
+
+        if not interaction.message.embeds:
+            await interaction.response.send_message(
+                "❌ Embed não encontrado.",
                 ephemeral=True
             )
             return
@@ -585,27 +597,21 @@ class CancelarModal(discord.ui.Modal, title="Cancelar Solicitação"):
             await asyncio.sleep(5)
             await canal.delete()
 
-
 # ================= READY =================
 
 @bot.event
 async def on_ready():
     print(f"🔥 Bot conectado como {bot.user}")
-
-    bot.add_view(ConfirmarOuFecharView(0))
-    bot.add_view(TicketView())
-
-    guild = bot.get_guild(GUILD_ID)
-
-    if not guild:
-        print("❌ Guild não encontrada.")
+    
+    # Pega a guild pelo ID
+    guild_id = 1343398652336537654  # substitua pelo ID do seu servidor
+    guild = bot.get_guild(guild_id)
+    
+    if guild is None:
+        print("⚠️ Servidor não encontrado!")
         return
 
-    try:
-        synced = await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
-        print(f"🔧 Slash sincronizados: {[cmd.name for cmd in synced]}")
-    except Exception as e:
-        print(f"Erro ao sincronizar: {e}")
+    await enviar_log(guild, "🚀 Bot iniciado", "Sistema de SET e Slash Commands ativos.")
 
 
     # ================= PAINEL SET =================
@@ -639,7 +645,7 @@ async def on_ready():
         embed.set_image(url="https://cdn.discordapp.com/attachments/1444735189765849320/1473872047947120640/54-anos-de-Rota.jpg?ex=6997c9cf&is=6996784f&hm=8815f19f7e150595b41debcc15e26a147af4a5912c962b41ec6dda5ffbf56f37&")
         
 
-        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1444735189765849320/1473870387547734139/032.png?ex=6997c843&is=699676c3&hm=d139e7716d0fb12c5b22c16b9c3114a7a4a149464c7273662875cedc624ee3de&\n")
+        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1444735189765849320/1473870387547734139/032.png?ex=6997c843&is=699676c3&hm=d139e7716d0fb12c5b22c16b9c3114a7a4a149464c7273662875cedc624ee3de&")
         embed.set_footer(text="Batalhão Rota Virtual® Todos direitos reservados.")
         
 
@@ -661,7 +667,6 @@ async def on_ready():
 
 # ================= RUN =================
 
-if not TOKEN:
-    print("ERRO: TOKEN não definido. Coloque TOKEN no .env ou variáveis de ambiente.")
-else:
-    bot.run(TOKEN)
+TOKEN="MTM3MDYzMDA2NDg1MjU3MDE2Mg.G4qB8A.YUvXSTVdZocdgaSKDcXIMlOmpdxFWYgTZj6WGI"
+
+bot.run(TOKEN)
