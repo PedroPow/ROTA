@@ -4,12 +4,8 @@ from discord.ui import View, Button, Select, Modal, TextInput
 from discord import Embed
 import asyncio
 import os
-import discord
 import aiohttp
 import io
-import os
-from discord.ext import commands
-from discord.ui import Modal, TextInput
 from datetime import datetime
 
 
@@ -44,11 +40,6 @@ CARGOS_AUTORIZADOS = [
 # ============================
 #         BOT + INTENTS
 # ============================
-intents = discord.Intents.default()
-intents.message_content = True
-intents.members = True
-
-bot = commands.Bot(command_prefix="!", intents=intents)
 TOKEN = os.getenv("TOKEN")  # coloque TOKEN no .env
 
 # guard para não reenviar painel/verify em reconexões
@@ -463,7 +454,7 @@ class DadosPessoaisModal(Modal, title="Dados ROTA"):
             color=discord.Color.dark_gray()
         )
 
-        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1444735189765849320/1473870387547734139/032.png?ex=6997c843&is=699676c3&hm=d139e7716d0fb12c5b22c16b9c3114a7a4a149464c7273662875cedc624ee3de&\n")
+        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1444735189765849320/1473870387547734139/032.png?ex=6997c843&is=699676c3&hm=d139e7716d0fb12c5b22c16b9c3114a7a4a149464c7273662875cedc624ee3de&")
         embed.set_image(url="https://jpimg.com.br/uploads/2017/08/SIG20170823031.jpg")
         embed.set_footer(text="Batalhão Rota Virtual® Todos direitos reservados.")
 
@@ -599,14 +590,23 @@ class CancelarModal(discord.ui.Modal, title="Cancelar Solicitação"):
 
 @bot.event
 async def on_ready():
-
     print(f"🔥 Bot conectado como {bot.user}")
+
+    bot.add_view(ConfirmarOuFecharView(0))
+    bot.add_view(TicketView())
 
     guild = bot.get_guild(GUILD_ID)
 
     if not guild:
         print("❌ Guild não encontrada.")
         return
+
+    try:
+        synced = await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
+        print(f"🔧 Slash sincronizados: {[cmd.name for cmd in synced]}")
+    except Exception as e:
+        print(f"Erro ao sincronizar: {e}")
+
 
     # ================= PAINEL SET =================
 
@@ -653,15 +653,11 @@ async def on_ready():
 
     # ================= SYNC SLASH =================
 
-    try:
-        synced = await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
-        print(f"🔧 Slash Commands sincronizados: {[cmd.name for cmd in synced]}")
-    except Exception as e:
-        print(f"Erro ao sincronizar comandos: {e}")
 
     # ================= LOG DE START =================
 
     await enviar_log(guild, "🚀 Bot iniciado", "Sistema de SET e Slash Commands ativos.")
+
 
 # ================= RUN =================
 
