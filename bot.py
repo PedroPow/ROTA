@@ -8,7 +8,6 @@ import aiohttp
 import io
 from datetime import datetime   
 
-
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -49,7 +48,6 @@ bot._ready_sent = False
 #        SISTEMA DE LOGS
 # ============================
 async def enviar_log_embed(guild: discord.Guild, embed: discord.Embed):
-    """Envia embed para o canal de logs se existir."""
     if not guild:
         return
     canal = guild.get_channel(LOG_CHANNEL_ID)
@@ -57,7 +55,6 @@ async def enviar_log_embed(guild: discord.Guild, embed: discord.Embed):
         try:
             await canal.send(embed=embed)
         except Exception:
-            # evita crash por falta de permissões
             return
 
 async def enviar_log(guild, titulo, descricao, cor=discord.Color.green()):
@@ -74,13 +71,11 @@ async def enviar_log(guild, titulo, descricao, cor=discord.Color.green()):
 #  HELPERS DE PERMISSÃO
 # ============================
 def has_authorized_role(member: discord.Member) -> bool:
-    """Checa se o membro possui pelo menos um dos cargos autorizados."""
     if not member or not hasattr(member, "roles"):
         return False
     return any(role.id in CARGOS_AUTORIZADOS for role in member.roles)
 
 async def require_authorized(interaction: discord.Interaction) -> bool:
-    """Verificação async (uso em comandos) — retorna True se autorizado."""
     if not has_authorized_role(interaction.user):
         await interaction.response.send_message("❌ Você não tem permissão (cargo inválido).", ephemeral=True)
         return False
@@ -113,7 +108,6 @@ async def enviar_painel(guild: discord.Guild):
         try:
             await canal.purge(limit=10)
         except Exception:
-            # se não tiver permissão para purge, tenta enviar mesmo assim
             pass
         embed = discord.Embed(
             title="🛠 Painel Administrativo",
@@ -130,7 +124,6 @@ async def enviar_painel(guild: discord.Guild):
 # ============================
 @bot.tree.command(name="clearall", description="Apaga todas as mensagens do canal atual.", guild=discord.Object(id=GUILD_ID))
 async def clearall(interaction: discord.Interaction):
-    # validar cargo autorizado
     if not await require_authorized(interaction):
         return
 
@@ -139,21 +132,16 @@ async def clearall(interaction: discord.Interaction):
     if canal is None or guild is None:
         return await interaction.response.send_message("❌ Contexto inválido.", ephemeral=True)
 
-    # responder rápido
     await interaction.response.send_message(f"🧹 Limpando todas as mensagens do canal **{canal.name}**...", ephemeral=True)
 
-    # limpa mensagens
     try:
-        # limite=None as vezes falha em alguns builds, tenta em bloco
         await canal.purge(limit=None)
     except Exception:
         try:
             await canal.purge()
         except Exception:
-            # se tudo falhar, informa o usuário
             pass
 
-    # enviar confirmação no canal limpo (se permitido)
     try:
         embed_confirm = discord.Embed(
             title="🧹 Canal Limpo",
@@ -162,10 +150,8 @@ async def clearall(interaction: discord.Interaction):
         )
         await canal.send(embed=embed_confirm)
     except Exception:
-        # sem permissão para enviar no canal limpo — ignora
         pass
 
-    # preparar log detalhado e enviar para o canal de logs (LOG_CHANNEL_ID)
     embed_log = discord.Embed(
         title="🧹 Log - Canal Limpo",
         description=(
@@ -193,9 +179,7 @@ class MensagemModal(Modal, title="📢 Enviar Mensagem"):
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        # checar autorização rapidamente
         if not has_authorized_role(interaction.user):
-            # interação ainda pode ser respondida
             await interaction.response.send_message("❌ Você não tem permissão para usar este modal.", ephemeral=True)
             return
 
@@ -232,7 +216,6 @@ class MensagemModal(Modal, title="📢 Enviar Mensagem"):
                     except Exception:
                         continue
 
-            # tenta deletar mensagens do usuário e a de confirmação
             try:
                 await msg_inicial.delete()
                 await reply.delete()
@@ -245,7 +228,6 @@ class MensagemModal(Modal, title="📢 Enviar Mensagem"):
                 await interaction.followup.send("❌ Não consegui reenviar a mensagem (permissão).", ephemeral=True)
 
         except asyncio.TimeoutError:
-            # tempo esgotado — só ignora
             try:
                 await interaction.followup.send("⏰ Tempo esgotado. Nenhum anexo recebido.", ephemeral=True)
             except Exception:
@@ -255,7 +237,6 @@ class MensagemModal(Modal, title="📢 Enviar Mensagem"):
 async def mensagem(interaction: discord.Interaction):
     if not await require_authorized(interaction):
         return
-    # abrir modal
     await interaction.response.send_modal(MensagemModal())
 
 # ============================
@@ -266,7 +247,6 @@ async def adv(interaction: discord.Interaction, membro: discord.Member, motivo: 
     if not await require_authorized(interaction):
         return
 
-    # mantém checagem extra: só membros com permissão de kick podem aplicar adv (opcional)
     if not interaction.user.guild_permissions.kick_members:
         return await interaction.response.send_message("❌ Você precisa de permissão para expulsar (kick) para aplicar advertências.", ephemeral=True)
 
@@ -299,7 +279,6 @@ async def adv(interaction: discord.Interaction, membro: discord.Member, motivo: 
 
     await interaction.response.send_message(msg, ephemeral=True)
 
-    # log
     embed = discord.Embed(
         title="⚠ Advertência aplicada",
         description=f"**Membro:** {membro.mention}\n**Por:** {interaction.user.mention}\n**Motivo:** {motivo}",
@@ -316,7 +295,6 @@ async def ban(interaction: discord.Interaction, membro: discord.Member, motivo: 
     if not await require_authorized(interaction):
         return
 
-    # checar permissão de ban
     if not interaction.user.guild_permissions.ban_members:
         return await interaction.response.send_message("❌ Você precisa da permissão de banir.", ephemeral=True)
 
@@ -342,13 +320,8 @@ CANALETA_SOLICITAR_SET_ID = 1343398652349255758
 CARGO_NOVATO_ID = 1345435302285545652
 CATEGORIA_TICKET_ID = 1343398652349255757
 
-# Canal de logs exclusivo ROTA
 CANAL_LOGS_ROTA = 1473844393893953679
-
-# Cargo da companhia ROTA
 CARGO_ROTA_ID = 1343645401051431017
-
-# ================= PATENTES ROTA =================
 
 PATENTES_ROTA = {
     "[❯] Soldado de 1º Classe PM": 1343408322774175785,
@@ -371,19 +344,21 @@ solicitacoes_abertas = {}
 
 class TicketView(View):
     @discord.ui.button(
-    label="Solicitar Funcional",
-    style=discord.ButtonStyle.secondary,
-    custom_id="rota_solicitar_funcional"
-)
+        label="Solicitar Funcional",
+        style=discord.ButtonStyle.secondary,
+        custom_id="rota_solicitar_funcional"
+    )
     async def abrir_ticket(self, interaction: discord.Interaction, button: Button):
 
         if interaction.user.id in solicitacoes_abertas:
             await interaction.response.send_message("⚠️ Você já possui um ticket aberto.", ephemeral=True)
             return
 
+        # ✅ Defer para evitar interaction failed
+        await interaction.response.defer(ephemeral=True)
+
         guild = interaction.guild
         user = interaction.user
-
         category = guild.get_channel(CATEGORIA_TICKET_ID)
 
         overwrites = {
@@ -400,18 +375,22 @@ class TicketView(View):
         solicitacoes_abertas[user.id] = {"canal_id": canal.id}
 
         view = View()
-        view.add_item(SelectPatente(user.id))
+        view.add_item(SelectPatente(user.id, custom_id=f"select_patente_{user.id}"))
 
         await canal.send(f"{user.mention}, selecione sua patente:", view=view)
-        await interaction.response.send_message("🎟️ Ticket criado!", ephemeral=True)
+        await interaction.followup.send("🎟️ Ticket criado!", ephemeral=True)
 
 # ================= SELECT PATENTE =================
 
 class SelectPatente(Select):
-    def __init__(self, user_id):
+    def __init__(self, user_id, custom_id):
         self.user_id = user_id
         options = [discord.SelectOption(label=nome, value=nome) for nome in PATENTES_ROTA]
-        super().__init__(placeholder="Escolha sua patente", options=options)
+        super().__init__(
+            placeholder="Escolha sua patente",
+            options=options,
+            custom_id=custom_id
+        )
 
     async def callback(self, interaction: discord.Interaction):
         patente_nome = self.values[0]
@@ -504,170 +483,26 @@ class ConfirmarOuFecharView(discord.ui.View):
             interaction.guild.get_role(CARGO_ROTA_ID)
         )
 
-        agora = datetime.now().strftime("%d/%m/%Y às %H:%M")
+        await interaction.response.send_message("✅ SET confirmado e cargos atribuídos.", ephemeral=True)
 
-        embed = interaction.message.embeds[0]
-        embed.color = discord.Color.green()
-        embed.description += (
-            f"\n\n✅ **Aprovado por:** {interaction.user.mention}"
-            f"\n📌 **ID do aprovador:** `{interaction.user.id}`"
-            f"\n🕒 **Data:** {agora}"
+        await membro.add_roles(
+            interaction.guild.get_role(dados['patente_id']),
+            interaction.guild.get_role(CARGO_ROTA_ID)
         )
 
-        await interaction.message.edit(embed=embed, view=None)
-        await interaction.response.send_message("✅ SET confirmado.", ephemeral=True)
+        await interaction.response.send_message("✅ SET confirmado e cargos atribuídos.", ephemeral=True)
 
-        canal = interaction.guild.get_channel(dados["canal_id"])
-        if canal:
-            await asyncio.sleep(5)
-            await canal.delete()
-
-    @discord.ui.button(
-        label="❌ Cancelar",
-        style=discord.ButtonStyle.danger,
-        custom_id="cancelar_set"
-    )
-    async def cancelar(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(CancelarModal(self.user_id))
-
-
-        await interaction.response.defer(ephemeral=True)
-
-
-class CancelarModal(discord.ui.Modal, title="Cancelar Solicitação"):
-
-    def __init__(self, user_id):
-        super().__init__()
-        self.user_id = user_id
-
-    motivo = discord.ui.TextInput(
-        label="Informe o motivo do cancelamento",
-        style=discord.TextStyle.paragraph,
-        required=True,
-        max_length=500
-    )
-
-    async def on_submit(self, interaction: discord.Interaction):
-
-        dados = solicitacoes_abertas.get(self.user_id)
-
-        if not dados:
-            await interaction.response.send_message(
-                "❌ Solicitação não encontrada (bot reiniciou).",
-                ephemeral=True
-            )
-            return
-
-        solicitacoes_abertas.pop(self.user_id, None)
-
-        if not interaction.message.embeds:
-            await interaction.response.send_message(
-                "❌ Embed não encontrado.",
-                ephemeral=True
-            )
-            return
-
-        embed = interaction.message.embeds[0]
-        embed.color = discord.Color.red()
-        embed.description += (
-            f"\n\n❌ **Cancelado por:** {interaction.user.mention}"
-            f"\n📌 **ID do avaliador:** `{interaction.user.id}`"
-            f"\n📝 **Motivo:** {self.motivo.value}"
-        )
-
-        await interaction.message.edit(embed=embed, view=None)
-
-        membro = interaction.guild.get_member(self.user_id)
-        if membro:
-            try:
-                await membro.send(
-                    f"🚫 Sua solicitação foi cancelada.\n\n"
-                    f"📝 Motivo:\n{self.motivo.value}"
-                )
-            except:
-                pass
-
-        await interaction.response.send_message(
-            "❌ Solicitação cancelada com sucesso.",
-            ephemeral=True
-        )
-
-        canal = interaction.guild.get_channel(dados["canal_id"])
-        if canal:
-            await asyncio.sleep(5)
-            await canal.delete()
-
-# ================= READY =================
+# ====================== INÍCIO ======================
 
 @bot.event
 async def on_ready():
-    print(f"🔥 Bot conectado como {bot.user}")
-    
-    # Pega a guild pelo ID
-    guild_id = 1343398652336537654  # substitua pelo ID do seu servidor
-    guild = bot.get_guild(guild_id)
-    
-    if guild is None:
-        print("⚠️ Servidor não encontrado!")
+    if bot._ready_sent:
         return
+    bot._ready_sent = True
 
-    await enviar_log(guild, "🚀 Bot iniciado", "Sistema de SET e Slash Commands ativos.")
+    guild = bot.get_guild(GUILD_ID)
+    if guild:
+        await enviar_painel(guild)
+        print(f"Bot online em {guild.name} ({guild.id})")
 
-
-    # ================= PAINEL SET =================
-
-    try:
-        canal = guild.get_channel(CANALETA_SOLICITAR_SET_ID)
-
-        if canal:
-            # Apaga mensagens antigas do bot
-            async for msg in canal.history(limit=10):
-                if msg.author == bot.user:
-                    await msg.delete()
-
-        # 1️⃣ Criar
-        embed = discord.Embed(
-            title="ROTA | Solicitar Funcional",
-            description=("Clique no botão abaixo para iniciar sua solicitação.\n\n"
-            "Clique no botão abaixo para alterar **Solicitar sua Funcional**.\n\n"
-            "Regras:\n"
-            "• Apenas nomes **REGISTRAVEIS**\n"
-            "• Após a solicitação **AGUARDE**\n"            
-            "• Apenas maiores de 18 anos\n"
-            "• Todas as alterações são **registradas**\n\n"
-            "• Caso tenha duvidas <#1473875232430227497>\n\n"
-            " _A Rota é reservada aos heróis_\n"                       
-                         ),
-            color=discord.Color.dark_gray()
-        )
-
-        # 2️⃣ Configurar
-        embed.set_image(url="https://cdn.discordapp.com/attachments/1444735189765849320/1473872047947120640/54-anos-de-Rota.jpg?ex=6997c9cf&is=6996784f&hm=8815f19f7e150595b41debcc15e26a147af4a5912c962b41ec6dda5ffbf56f37&")
-        
-
-        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1444735189765849320/1473870387547734139/032.png?ex=6997c843&is=699676c3&hm=d139e7716d0fb12c5b22c16b9c3114a7a4a149464c7273662875cedc624ee3de&")
-        embed.set_footer(text="Batalhão Rota Virtual® Todos direitos reservados.")
-        
-
-        # 3️⃣ Enviar
-        await canal.send(embed=embed, view=TicketView())
-
-
-
-    except Exception as e:  
-        print(f"Erro ao enviar painel SET: {e}")
-
-    # ================= SYNC SLASH =================
-
-
-    # ================= LOG DE START =================
-
-    await enviar_log(guild, "🚀 Bot iniciado", "Sistema de SET e Slash Commands ativos.")
-
-
-# ================= RUN =================
-
-if not TOKEN:
-    print("ERRO: TOKEN não definido. Coloque TOKEN no .env ou variáveis de ambiente.")
-else:
-    bot.run(TOKEN)
+bot.run(TOKEN)
