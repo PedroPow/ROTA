@@ -473,6 +473,9 @@ class DadosPessoaisModal(Modal, title="Dados ROTA"):
         await interaction.followup.send("✅ Solicitação enviada para avaliação.", ephemeral=True)
 
 
+
+
+
 # ================= CONFIRMAR =================
 
 class ConfirmarOuFecharView(View):
@@ -485,10 +488,19 @@ class ConfirmarOuFecharView(View):
 
         dados = solicitacoes_abertas.pop(self.user_id, None)
         if not dados:
-            await interaction.response.send_message("❌ Solicitação não encontrada.", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ Solicitação não encontrada.",
+                ephemeral=True
+            )
             return
 
         membro = interaction.guild.get_member(self.user_id)
+        if not membro:
+            await interaction.response.send_message(
+                "❌ Membro não encontrado.",
+                ephemeral=True
+            )
+            return
 
         novo_apelido = f"#{dados['passaporte']} | {dados['nome']}"
 
@@ -498,7 +510,7 @@ class ConfirmarOuFecharView(View):
             pass
 
         novato = interaction.guild.get_role(CARGO_NOVATO_ID)
-        if novato in membro.roles:
+        if novato and novato in membro.roles:
             await membro.remove_roles(novato)
 
         await membro.add_roles(
@@ -524,25 +536,15 @@ class ConfirmarOuFecharView(View):
             await asyncio.sleep(5)
             await canal.delete()
 
-
     @discord.ui.button(label="❌ Cancelar", style=discord.ButtonStyle.danger)
     async def cancelar(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.send_modal(CancelarModal(self.user_id))
 
-        dados = solicitacoes_abertas.pop(self.user_id, None)
+class CancelarModal(discord.ui.Modal, title="Cancelar Solicitação"):
 
-        embed = interaction.message.embeds[0]
-        embed.color = discord.Color.red()
-        embed.description += f"\n\n❌ **Cancelado por:** {interaction.user.mention}"
-
-        await interaction.message.edit(embed=embed, view=None)
-
-        await interaction.response.send_message("🗑️ Solicitação cancelada.", ephemeral=True)
-
-        if dados:
-            canal = interaction.guild.get_channel(dados["canal_id"])
-            if canal:
-                await asyncio.sleep(5)
-                await canal.delete()
+    def __init__(self, user_id):
+        super().__init__()
+        self.user_id = user_id
 
     motivo = discord.ui.TextInput(
         label="Informe o motivo do cancelamento",
@@ -551,13 +553,16 @@ class ConfirmarOuFecharView(View):
         max_length=500
     )
 
-    def __init__(self, user_id):
-        super().__init__()
-        self.user_id = user_id
-
     async def on_submit(self, interaction: discord.Interaction):
 
         dados = solicitacoes_abertas.pop(self.user_id, None)
+
+        if not dados:
+            await interaction.response.send_message(
+                "❌ Solicitação não encontrada.",
+                ephemeral=True
+            )
+            return
 
         embed = interaction.message.embeds[0]
         embed.color = discord.Color.red()
@@ -569,27 +574,25 @@ class ConfirmarOuFecharView(View):
 
         await interaction.message.edit(embed=embed, view=None)
 
-        # Notificar usuário na DM
         membro = interaction.guild.get_member(self.user_id)
         if membro:
             try:
                 await membro.send(
-                    f"🚫 Sua solicitação de funcional ROTA foi cancelada.\n\n"
+                    f"🚫 Sua solicitação foi cancelada.\n\n"
                     f"📝 Motivo:\n{self.motivo.value}"
                 )
             except:
                 pass
 
-        await interaction.response.send_message("❌ Solicitação cancelada com sucesso.", ephemeral=True)
+        await interaction.response.send_message(
+            "❌ Solicitação cancelada com sucesso.",
+            ephemeral=True
+        )
 
-        # Fechar ticket
-        if dados:
-            canal = interaction.guild.get_channel(dados["canal_id"])
-            if canal:
-                await asyncio.sleep(5)
-                await canal.delete()                
-
-
+        canal = interaction.guild.get_channel(dados["canal_id"])
+        if canal:
+            await asyncio.sleep(5)
+            await canal.delete()
 
 
 # ================= READY =================
