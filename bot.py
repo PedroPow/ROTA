@@ -667,6 +667,7 @@ async def on_ready():
 
 # ================= RUN =================
 
-TOKEN="MTM3MDYzMDA2NDg1MjU3MDE2Mg.G4qB8A.YUvXSTVdZocdgaSKDcXIMlOmpdxFWYgTZj6WGI"
-
-bot.run(TOKEN)
+if not TOKEN:
+    print("ERRO: TOKEN não definido. Coloque TOKEN no .env ou variáveis de ambiente.")
+else:
+    bot.run(TOKEN)
