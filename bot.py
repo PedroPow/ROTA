@@ -7,9 +7,8 @@ import os
 import aiohttp
 import io
 from datetime import datetime
-import pytz
-
-BRASIL = pytz.timezone("America/Sao_Paulo")
+from zoneinfo import ZoneInfo
+BRASIL = ZoneInfo("America/Sao_Paulo")
 
 
 intents = discord.Intents.all()
