@@ -7,6 +7,10 @@ import os
 import aiohttp
 import io
 from datetime import datetime
+import pytz
+
+BRASIL = pytz.timezone("America/Sao_Paulo")
+
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -430,7 +434,7 @@ class ConfirmarOuFecharView(View):
             interaction.guild.get_role(CARGO_ROTA_ID)
         )
 
-        agora = datetime.now().strftime("%d/%m/%Y às %H:%M")
+        agora = datetime.now(BRASIL).strftime("%d/%m/%Y às %H:%M")
 
         embed = interaction.message.embeds[0]
         embed.color = discord.Color.green()
