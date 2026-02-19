@@ -455,6 +455,19 @@ class ConfirmarOuFecharView(View):
             await canal.delete()
 
 
+    @discord.ui.button(
+        label="❌ Cancelar",
+        style=discord.ButtonStyle.danger,
+        custom_id="cancelar_set"
+    )
+    async def cancelar(self, interaction: discord.Interaction, button: Button):
+
+        await interaction.response.send_modal(
+            CancelarModal(self.user_id)
+        )
+
+# ================= CANCELAR =================
+
 class CancelarModal(Modal, title="Cancelar Solicitação"):
 
     motivo = TextInput(
@@ -511,8 +524,6 @@ class CancelarModal(Modal, title="Cancelar Solicitação"):
         if canal:
             await asyncio.sleep(5)
             await canal.delete()
-
-
 
 # ============================
 # READY
