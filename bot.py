@@ -226,44 +226,110 @@ CATEGORIA_TICKET_ID = 1343398652349255757
 CANAL_LOGS_ROTA = 1473844393893953679
 CARGO_ROTA_ID = 1343645401051431017
 
-# Ticket view
+solicitacoes_abertas = {}
+
+# ================= TICKET VIEW =================
+
 class TicketView(View):
-    @discord.ui.button(label="Solicitar Funcional", style=discord.ButtonStyle.secondary, custom_id="rota_solicitar_funcional")
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(
+        label="Solicitar Funcional",
+        style=discord.ButtonStyle.secondary,
+        custom_id="rota_solicitar_funcional"
+    )
     async def abrir_ticket(self, interaction: discord.Interaction, button: Button):
+
         if interaction.user.id in solicitacoes_abertas:
-            await interaction.response.send_message("⚠️ Você já possui um ticket aberto.", ephemeral=True)
+            await interaction.response.send_message(
+                "⚠️ Você já possui um ticket aberto.",
+                ephemeral=True
+            )
             return
+
+        await interaction.response.defer(ephemeral=True)
+
         guild = interaction.guild
         user = interaction.user
         category = guild.get_channel(CATEGORIA_TICKET_ID)
+
         if not category:
-            await interaction.response.send_message("❌ Categoria de ticket não encontrada.", ephemeral=True)
+            await interaction.followup.send(
+                "❌ Categoria de ticket não encontrada.",
+                ephemeral=True
+            )
             return
+
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
             user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
         }
-        canal = await guild.create_text_channel(name=f"ticket-rota-{user.name}", category=category, overwrites=overwrites)
-        solicitacoes_abertas[user.id] = {"canal_id": canal.id}
-        view = View()
-        view.add_item(SelectPatente(user.id))
-        await canal.send(f"{user.mention}, selecione sua patente:", view=view)
-        await interaction.response.send_message("🎟️ Ticket criado!", ephemeral=True)
 
-# Select patente
+        canal = await guild.create_text_channel(
+            name=f"ticket-rota-{user.name}",
+            category=category,
+            overwrites=overwrites
+        )
+
+        solicitacoes_abertas[user.id] = {
+            "canal_id": canal.id
+        }
+
+        view = View(timeout=None)
+        view.add_item(SelectPatente(user.id))
+
+        await canal.send(
+            f"{user.mention}, selecione sua patente:",
+            view=view
+        )
+
+        await interaction.followup.send(
+            "🎟️ Ticket criado com sucesso.",
+            ephemeral=True
+        )
+
+# ================= SELECT PATENTE =================
+
 class SelectPatente(Select):
     def __init__(self, user_id):
         self.user_id = user_id
-        options = [discord.SelectOption(label=nome, value=nome) for nome in PATENTES_ROTA]
-        super().__init__(placeholder="Escolha sua patente", options=options)
+
+        options = [
+            discord.SelectOption(label=nome, value=nome)
+            for nome in PATENTES_ROTA
+        ]
+
+        super().__init__(
+            placeholder="Escolha sua patente",
+            options=options
+        )
 
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.send_modal(DadosPessoaisModal(self.user_id, self.values[0], PATENTES_ROTA[self.values[0]]))
 
-# Modal dados pessoais
+        await interaction.response.send_modal(
+            DadosPessoaisModal(
+                self.user_id,
+                self.values[0],
+                PATENTES_ROTA[self.values[0]]
+            )
+        )
+
+# ================= MODAL =================
+
 class DadosPessoaisModal(Modal, title="Dados ROTA"):
-    nome = TextInput(label="Nome Completo", required=True, max_length=80)
-    passaporte = TextInput(label="Passaporte", required=True, max_length=20)
+
+    nome = TextInput(
+        label="Nome Completo",
+        required=True,
+        max_length=80
+    )
+
+    passaporte = TextInput(
+        label="Passaporte",
+        required=True,
+        max_length=20
+    )
 
     def __init__(self, user_id, patente_nome, patente_id):
         super().__init__()
@@ -272,93 +338,167 @@ class DadosPessoaisModal(Modal, title="Dados ROTA"):
         self.patente_id = patente_id
 
     async def on_submit(self, interaction: discord.Interaction):
+
+        if self.user_id not in solicitacoes_abertas:
+            await interaction.response.send_message(
+                "❌ Ticket não encontrado.",
+                ephemeral=True
+            )
+            return
+
         solicitacoes_abertas[self.user_id].update({
             "patente_id": self.patente_id,
             "nome": self.nome.value.strip(),
             "passaporte": self.passaporte.value.strip()
         })
+
         embed = Embed(
             title="Solicitação Funcional.",
-            description=(f"**Solicitante:** {interaction.user.mention}\n"
-                         f"**Nome:** {self.nome.value.strip()}\n"
-                         f"**Passaporte:** {self.passaporte.value.strip()}\n"
-                         f"**Companhia:** 1° BPCHQ ROTA\n"
-                         f"**Patente:** {self.patente_nome}"),
+            description=(
+                f"**Solicitante:** {interaction.user.mention}\n"
+                f"**Nome:** {self.nome.value.strip()}\n"
+                f"**Passaporte:** {self.passaporte.value.strip()}\n"
+                f"**Companhia:** 1° BPCHQ ROTA\n"
+                f"**Patente:** {self.patente_nome}"
+            ),
             color=discord.Color.dark_gray()
         )
-        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1444735189765849320/1473870387547734139/032.png")
-        embed.set_image(url="https://jpimg.com.br/uploads/2017/08/SIG20170823031.jpg")
-        embed.set_footer(text="Batalhão Rota Virtual® Todos direitos reservados.")
-        canal_logs = await interaction.client.fetch_channel(CANAL_LOGS_ROTA)
-        await canal_logs.send(embed=embed, view=ConfirmarOuFecharView(self.user_id))
-        await interaction.response.send_message("✅ Solicitação enviada para avaliação.", ephemeral=True)
 
-# Confirmar ou cancelar view
+        embed.set_thumbnail(
+            url="https://cdn.discordapp.com/attachments/1444735189765849320/1473870387547734139/032.png"
+        )
+
+        embed.set_image(
+            url="https://jpimg.com.br/uploads/2017/08/SIG20170823031.jpg"
+        )
+
+        embed.set_footer(
+            text="Batalhão Rota Virtual® Todos direitos reservados."
+        )
+
+        canal_logs = await interaction.client.fetch_channel(CANAL_LOGS_ROTA)
+
+        await canal_logs.send(
+            embed=embed,
+            view=ConfirmarOuFecharView(self.user_id)
+        )
+
+        await interaction.response.send_message(
+            "✅ Solicitação enviada para avaliação.",
+            ephemeral=True
+        )
+
+# ================= CONFIRMAR / CANCELAR =================
+
 class ConfirmarOuFecharView(View):
     def __init__(self, user_id):
         super().__init__(timeout=None)
         self.user_id = user_id
 
-    @discord.ui.button(label="✅ Confirmar SET", style=discord.ButtonStyle.success, custom_id="confirmar_set")
+    @discord.ui.button(
+        label="✅ Confirmar SET",
+        style=discord.ButtonStyle.success,
+        custom_id="confirmar_set"
+    )
     async def confirmar(self, interaction: discord.Interaction, button: Button):
+
         dados = solicitacoes_abertas.pop(self.user_id, None)
+
         if not dados:
-            await interaction.response.send_message("❌ Solicitação não encontrada.", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ Solicitação não encontrada.",
+                ephemeral=True
+            )
             return
+
         membro = interaction.guild.get_member(self.user_id)
+
         novo_apelido = f"#{dados['passaporte']} | {dados['nome']}"
+
         try:
             await membro.edit(nick=novo_apelido)
         except:
             pass
+
         novato = interaction.guild.get_role(CARGO_NOVATO_ID)
+
         if novato in membro.roles:
             await membro.remove_roles(novato)
-        await membro.add_roles(interaction.guild.get_role(dados['patente_id']), interaction.guild.get_role(CARGO_ROTA_ID))
-        agora = datetime.now().strftime("%d/%m/%Y às %H:%M")
+
+        await membro.add_roles(
+            interaction.guild.get_role(dados['patente_id']),
+            interaction.guild.get_role(CARGO_ROTA_ID)
+        )
+
         embed = interaction.message.embeds[0]
         embed.color = discord.Color.green()
-        embed.description += f"\n\n✅ **Aprovado por:** {interaction.user.mention}\n📌 **ID do aprovador:** `{interaction.user.id}`\n🕒 **Data:** {agora}"
+
         await interaction.message.edit(embed=embed, view=None)
-        await interaction.response.send_message("✅ SET confirmado.", ephemeral=True)
+
+        await interaction.response.send_message(
+            "✅ SET confirmado.",
+            ephemeral=True
+        )
+
         canal = interaction.guild.get_channel(dados["canal_id"])
+
         if canal:
             await asyncio.sleep(5)
             await canal.delete()
 
-    @discord.ui.button(label="❌ Cancelar", style=discord.ButtonStyle.danger, custom_id="cancelar_set")
+    @discord.ui.button(
+        label="❌ Cancelar",
+        style=discord.ButtonStyle.danger,
+        custom_id="cancelar_set"
+    )
     async def cancelar(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.send_modal(CancelarModal(self.user_id))
 
-# Cancelar modal
+        await interaction.response.send_modal(
+            CancelarModal(self.user_id)
+        )
+
+# ================= CANCELAR =================
+
 class CancelarModal(Modal, title="Cancelar Solicitação"):
-    motivo = TextInput(label="Informe o motivo do cancelamento", style=discord.TextStyle.paragraph, required=True, max_length=500)
+
+    motivo = TextInput(
+        label="Informe o motivo do cancelamento",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        max_length=500
+    )
 
     def __init__(self, user_id):
         super().__init__()
         self.user_id = user_id
 
     async def on_submit(self, interaction: discord.Interaction):
-        dados = solicitacoes_abertas.get(self.user_id)
+
+        dados = solicitacoes_abertas.pop(self.user_id, None)
+
         if not dados:
-            await interaction.response.send_message("❌ Solicitação não encontrada.", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ Solicitação não encontrada.",
+                ephemeral=True
+            )
             return
-        solicitacoes_abertas.pop(self.user_id, None)
+
         embed = interaction.message.embeds[0]
         embed.color = discord.Color.red()
-        embed.description += f"\n\n❌ **Cancelado por:** {interaction.user.mention}\n📌 **ID do avaliador:** `{interaction.user.id}`\n📝 **Motivo:** {self.motivo.value}"
+
         await interaction.message.edit(embed=embed, view=None)
-        membro = interaction.guild.get_member(self.user_id)
-        if membro:
-            try:
-                await membro.send(f"🚫 Sua solicitação foi cancelada.\n\n📝 Motivo:\n{self.motivo.value}")
-            except:
-                pass
-        await interaction.response.send_message("❌ Solicitação cancelada com sucesso.", ephemeral=True)
+
+        await interaction.response.send_message(
+            "❌ Solicitação cancelada.",
+            ephemeral=True
+        )
+
         canal = interaction.guild.get_channel(dados["canal_id"])
+
         if canal:
             await asyncio.sleep(5)
             await canal.delete()
+
 
 # ============================
 # READY
@@ -366,10 +506,16 @@ class CancelarModal(Modal, title="Cancelar Solicitação"):
 @bot.event
 async def on_ready():
     print(f"🔥 Bot conectado como {bot.user}")
+
+    # Persistir botões (evita interação falhar depois de um tempo)
+    bot.add_view(TicketView())
+    bot.add_view(PainelAdminView())
+
     guild = bot.get_guild(GUILD_ID)
     if not guild:
         print("⚠️ Servidor não encontrado!")
         return
+
     await enviar_log(guild, "🚀 Bot iniciado", "Sistema de SET e Slash Commands ativos.")
 
     # PAINEL SET
@@ -379,16 +525,37 @@ async def on_ready():
             async for msg in canal.history(limit=10):
                 if msg.author == bot.user:
                     await msg.delete()
-            embed = Embed(title="ROTA | Solicitar Funcional",
-                          description=("Clique no botão abaixo para iniciar sua solicitação.\n"
-                                       "Regras:\n• Apenas nomes REGISTRAVEIS\n• Após a solicitação AGUARDE\n• Apenas maiores de 18 anos"),
-                          color=discord.Color.dark_gray())
-            embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1444735189765849320/1473870387547734139/032.png")
-            embed.set_image(url="https://cdn.discordapp.com/attachments/1444735189765849320/1473872047947120640/54-anos-de-Rota.jpg")
+
+            embed = Embed(
+                title="ROTA | Solicitar Funcional",
+                description=(
+                    "Clique no botão abaixo para iniciar sua solicitação.\n"
+                    "Regras:\n"
+                    "• Apenas nomes REGISTRAVEIS\n"
+                    "• Após a solicitação AGUARDE\n"
+                    "• Apenas maiores de 18 anos"
+                ),
+                color=discord.Color.dark_gray()
+            )
+
+            embed.set_thumbnail(
+                url="https://cdn.discordapp.com/attachments/1444735189765849320/1473870387547734139/032.png"
+            )
+            embed.set_image(
+                url="https://cdn.discordapp.com/attachments/1444735189765849320/1473872047947120640/54-anos-de-Rota.jpg"
+            )
             embed.set_footer(text="Batalhão Rota Virtual® Todos direitos reservados.")
+
             await canal.send(embed=embed, view=TicketView())
+
     except Exception as e:
         print(f"Erro ao enviar painel SET: {e}")
+
+    bot.add_view(TicketView())
+    bot.add_view(PainelAdminView())
+    bot.add_view(ConfirmarOuFecharView(0))
+
+
 
 # ============================
 # RUN
@@ -397,3 +564,4 @@ if not TOKEN:
     print("ERRO: TOKEN não definido.")
 else:
     bot.run(TOKEN)
+
