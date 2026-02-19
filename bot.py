@@ -379,7 +379,7 @@ solicitacoes_abertas = {}
 # ================= TICKET =================
 
 class TicketView(View):
-    @discord.ui.button(label="Solicitar Funcional ROTA", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Solicitar Funcional", style=discord.ButtonStyle.secondary)
     async def abrir_ticket(self, interaction: discord.Interaction, button: Button):
 
         if interaction.user.id in solicitacoes_abertas:
