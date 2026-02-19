@@ -430,8 +430,16 @@ class ConfirmarOuFecharView(View):
             interaction.guild.get_role(CARGO_ROTA_ID)
         )
 
+        agora = datetime.now().strftime("%d/%m/%Y às %H:%M")
+
         embed = interaction.message.embeds[0]
         embed.color = discord.Color.green()
+
+        embed.description += (
+            f"\n\n✅ **Aprovado por:** {interaction.user.mention}"
+            f"\n📌 **ID do aprovador:** `{interaction.user.id}`"
+            f"\n🕒 **Data:** {agora}"
+        )
 
         await interaction.message.edit(embed=embed, view=None)
 
@@ -446,18 +454,6 @@ class ConfirmarOuFecharView(View):
             await asyncio.sleep(5)
             await canal.delete()
 
-    @discord.ui.button(
-        label="❌ Cancelar",
-        style=discord.ButtonStyle.danger,
-        custom_id="cancelar_set"
-    )
-    async def cancelar(self, interaction: discord.Interaction, button: Button):
-
-        await interaction.response.send_modal(
-            CancelarModal(self.user_id)
-        )
-
-# ================= CANCELAR =================
 
 class CancelarModal(Modal, title="Cancelar Solicitação"):
 
@@ -486,7 +482,24 @@ class CancelarModal(Modal, title="Cancelar Solicitação"):
         embed = interaction.message.embeds[0]
         embed.color = discord.Color.red()
 
+        embed.description += (
+            f"\n\n❌ **Cancelado por:** {interaction.user.mention}"
+            f"\n📌 **ID do avaliador:** `{interaction.user.id}`"
+            f"\n📝 **Motivo:** {self.motivo.value}"
+        )
+
         await interaction.message.edit(embed=embed, view=None)
+
+        membro = interaction.guild.get_member(self.user_id)
+
+        if membro:
+            try:
+                await membro.send(
+                    f"🚫 Sua solicitação foi cancelada.\n\n"
+                    f"Motivo:\n{self.motivo.value}"
+                )
+            except:
+                pass
 
         await interaction.response.send_message(
             "❌ Solicitação cancelada.",
@@ -498,6 +511,7 @@ class CancelarModal(Modal, title="Cancelar Solicitação"):
         if canal:
             await asyncio.sleep(5)
             await canal.delete()
+
 
 
 # ============================
