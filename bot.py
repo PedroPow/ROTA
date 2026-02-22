@@ -127,9 +127,11 @@ async def adv(interaction: discord.Interaction, membro: discord.Member, motivo: 
     if not await require_authorized(interaction):
         return
 
-    # mantém checagem extra: só membros com permissão de kick podem aplicar adv (opcional)
     if not interaction.user.guild_permissions.kick_members:
-        return await interaction.response.send_message("❌ Você precisa de permissão para expulsar (kick) para aplicar advertências.", ephemeral=True)
+        return await interaction.response.send_message(
+            "❌ Você precisa de permissão para expulsar (kick) para aplicar advertências.",
+            ephemeral=True
+        )
 
     adv1 = interaction.guild.get_role(ID_CARGO_ADV1)
     adv2 = interaction.guild.get_role(ID_CARGO_ADV2)
@@ -160,17 +162,18 @@ async def adv(interaction: discord.Interaction, membro: discord.Member, motivo: 
 
     await interaction.response.send_message(msg, ephemeral=True)
 
-    # log
+    # LOG ADV
     embed = discord.Embed(
         title="⚠ Advertência aplicada",
         description=f"**Membro:** {membro.mention}\n**Por:** {interaction.user.mention}\n**Motivo:** {motivo}",
         color=discord.Color.orange(),
         timestamp=discord.utils.utcnow()
     )
-    
+
     canal_log = interaction.guild.get_channel(LOG_ADV)
-if canal_log:
-    await canal_log.send(embed=embed)
+    if canal_log:
+        await canal_log.send(embed=embed)
+
 
 # ============================
 #            BAN
@@ -180,7 +183,6 @@ async def ban(interaction: discord.Interaction, membro: discord.Member, motivo: 
     if not await require_authorized(interaction):
         return
 
-    # checar permissão de ban
     if not interaction.user.guild_permissions.ban_members:
         return await interaction.response.send_message("❌ Você precisa da permissão de banir.", ephemeral=True)
 
@@ -196,9 +198,10 @@ async def ban(interaction: discord.Interaction, membro: discord.Member, motivo: 
         color=discord.Color.red(),
         timestamp=discord.utils.utcnow()
     )
+
     canal_log = interaction.guild.get_channel(LOG_BAN)
-if canal_log:
-    await canal_log.send(embed=embed)            
+    if canal_log:
+        await canal_log.send(embed=embed)       
 
 # ============================
 # SLASH COMMANDS
