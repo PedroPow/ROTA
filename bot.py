@@ -118,6 +118,82 @@ async def enviar_painel(guild: discord.Guild):
             pass
 
 # ============================
+#      SISTEMA DE ADVs
+# ============================
+@bot.tree.command(name="adv", description="Aplica advertência.", guild=discord.Object(id=GUILD_ID))
+async def adv(interaction: discord.Interaction, membro: discord.Member, motivo: str):
+    if not await require_authorized(interaction):
+        return
+
+    # mantém checagem extra: só membros com permissão de kick podem aplicar adv (opcional)
+    if not interaction.user.guild_permissions.kick_members:
+        return await interaction.response.send_message("❌ Você precisa de permissão para expulsar (kick) para aplicar advertências.", ephemeral=True)
+
+    adv1 = interaction.guild.get_role(ID_CARGO_ADV1)
+    adv2 = interaction.guild.get_role(ID_CARGO_ADV2)
+    adv3 = interaction.guild.get_role(ID_CARGO_ADV3)
+    banido = interaction.guild.get_role(ID_CARGO_BANIDO)
+
+    if banido in membro.roles:
+        return await interaction.response.send_message("⚠ Esse membro já está banido.", ephemeral=True)
+
+    if adv3 in membro.roles:
+        try:
+            await membro.remove_roles(adv3)
+            await membro.add_roles(banido)
+            msg = "🚫 4ª advertência → BANIDO"
+        except Exception:
+            return await interaction.response.send_message("❌ Erro ao atualizar cargos.", ephemeral=True)
+    elif adv2 in membro.roles:
+        await membro.remove_roles(adv2)
+        await membro.add_roles(adv3)
+        msg = "⚠ 3ª advertência aplicada!"
+    elif adv1 in membro.roles:
+        await membro.remove_roles(adv1)
+        await membro.add_roles(adv2)
+        msg = "⚠ 2ª advertência aplicada!"
+    else:
+        await membro.add_roles(adv1)
+        msg = "⚠ 1ª advertência aplicada!"
+
+    await interaction.response.send_message(msg, ephemeral=True)
+
+    # log
+    embed = discord.Embed(
+        title="⚠ Advertência aplicada",
+        description=f"**Membro:** {membro.mention}\n**Por:** {interaction.user.mention}\n**Motivo:** {motivo}",
+        color=discord.Color.orange(),
+        timestamp=discord.utils.utcnow()
+    )
+    await enviar_log_embed(interaction.guild, embed)
+
+# ============================
+#            BAN
+# ============================
+@bot.tree.command(name="ban", description="Bane um membro.", guild=discord.Object(id=GUILD_ID))
+async def ban(interaction: discord.Interaction, membro: discord.Member, motivo: str):
+    if not await require_authorized(interaction):
+        return
+
+    # checar permissão de ban
+    if not interaction.user.guild_permissions.ban_members:
+        return await interaction.response.send_message("❌ Você precisa da permissão de banir.", ephemeral=True)
+
+    try:
+        await membro.ban(reason=motivo)
+        await interaction.response.send_message(f"🔨 {membro.mention} banido!", ephemeral=True)
+    except discord.Forbidden:
+        return await interaction.response.send_message("❌ O bot não pode banir esse usuário.", ephemeral=True)
+
+    embed = discord.Embed(
+        title="🚫 Membro Banido",
+        description=f"**Membro:** {membro.mention}\n**Por:** {interaction.user.mention}\n**Motivo:** {motivo}",
+        color=discord.Color.red(),
+        timestamp=discord.utils.utcnow()
+    )
+    await enviar_log_embed(interaction.guild, embed)            
+
+# ============================
 # SLASH COMMANDS
 # ============================
 @bot.tree.command(name="clearall", description="Apaga todas as mensagens do canal atual.", guild=discord.Object(id=GUILD_ID))
