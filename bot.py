@@ -167,7 +167,10 @@ async def adv(interaction: discord.Interaction, membro: discord.Member, motivo: 
         color=discord.Color.orange(),
         timestamp=discord.utils.utcnow()
     )
-    await enviar_log_embed(interaction.guild, embed)
+    
+    canal_log = interaction.guild.get_channel(LOG_ADV)
+if canal_log:
+    await canal_log.send(embed=embed)
 
 # ============================
 #            BAN
@@ -193,7 +196,9 @@ async def ban(interaction: discord.Interaction, membro: discord.Member, motivo: 
         color=discord.Color.red(),
         timestamp=discord.utils.utcnow()
     )
-    await enviar_log_embed(interaction.guild, embed)            
+    canal_log = interaction.guild.get_channel(LOG_BAN)
+if canal_log:
+    await canal_log.send(embed=embed)            
 
 # ============================
 # SLASH COMMANDS
