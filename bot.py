@@ -177,7 +177,7 @@ class AdvModal(discord.ui.Modal, title="Aplicar Advertência"):
         )
 
         embed.set_thumbnail(url=self.membro.display_avatar.url)
-        embed.set_image(url="https://i.imgur.com/Zs6JYpD.png")
+        embed.set_image(url="https://cdn.discordapp.com/attachments/1444735189765849320/1474956398235353108/Logo_SSP.png?ex=699c6470&is=699b12f0&hm=5cc66b9a477a160abe7a92d291683d0dafde0659a13f868950ecd0f3be25fd9d&")
 
         canal_log = interaction.guild.get_channel(LOG_ADV)
         if canal_log:
@@ -256,7 +256,7 @@ class BanModal(discord.ui.Modal, title="Banir Membro"):
         )
 
         embed.set_thumbnail(url=self.membro.display_avatar.url)
-        embed.set_image(url="https://i.imgur.com/8B7QFQH.png")
+        embed.set_image(url="https://cdn.discordapp.com/attachments/1444735189765849320/1474956398235353108/Logo_SSP.png?ex=699c6470&is=699b12f0&hm=5cc66b9a477a160abe7a92d291683d0dafde0659a13f868950ecd0f3be25fd9d&")
 
         canal_log = interaction.guild.get_channel(LOG_BAN)
         if canal_log:
