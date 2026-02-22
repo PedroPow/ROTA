@@ -226,10 +226,12 @@ class BanModal(discord.ui.Modal, title="Banir Membro"):
     async def on_submit(self, interaction: discord.Interaction):
 
         embed_dm = discord.Embed(
-            title="Você foi banido do servidor",
+            title="Você foi banido do servidor\n\n",
             description=f"**Motivo:**\n{self.motivo.value}",
             color=discord.Color.red()
         )
+
+        embed.set_image(url="https://cdn.discordapp.com/attachments/1444735189765849320/1474956398235353108/Logo_SSP.png?ex=699c6470&is=699b12f0&hm=5cc66b9a477a160abe7a92d291683d0dafde0659a13f868950ecd0f3be25fd9d&")        
 
         try:
             await self.membro.send(embed=embed_dm)
