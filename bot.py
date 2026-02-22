@@ -122,13 +122,13 @@ async def enviar_painel(guild: discord.Guild):
 # ============================
 # MODAL ADV
 # ============================
-class AdvModal(Modal, title="Aplicar Advertência"):
+class AdvModal(discord.ui.Modal, title="Aplicar Advertência"):
 
-    motivo = TextInput(
+    motivo = discord.ui.TextInput(
         label="Motivo da advertência",
         style=discord.TextStyle.paragraph,
         required=True,
-        max_length=500
+        max_length=4000  # limite máximo do Discord
     )
 
     def __init__(self, membro: discord.Member):
@@ -165,12 +165,12 @@ class AdvModal(Modal, title="Aplicar Advertência"):
             status = "⚠ 1ª advertência aplicada"
 
         embed = discord.Embed(
-            title="Sistema Disciplinar",
+            title="Sistema Disciplinar • Advertência",
             description=(
                 f"**Policial:** {self.membro.mention}\n"
-                f"**Aplicado por:** {interaction.user.mention}\n"
-                f"**Motivo:** {self.motivo.value}\n\n"
-                f"{status}"
+                f"**Aplicado por:** {interaction.user.mention}\n\n"
+                f"**Motivo:**\n{self.motivo.value}\n\n"
+                f"**Resultado:** {status}"
             ),
             color=discord.Color.orange(),
             timestamp=discord.utils.utcnow()
@@ -184,7 +184,7 @@ class AdvModal(Modal, title="Aplicar Advertência"):
             await canal_log.send(embed=embed)
 
         await interaction.response.send_message(
-            "✅ Advertência aplicada com sucesso.",
+            "✅ Advertência registrada.",
             ephemeral=True
         )
 
@@ -210,13 +210,13 @@ async def adv(interaction: discord.Interaction, membro: discord.Member):
 # ============================
 # MODAL BAN
 # ============================
-class BanModal(Modal, title="Banir Membro"):
+class BanModal(discord.ui.Modal, title="Banir Membro"):
 
-    motivo = TextInput(
+    motivo = discord.ui.TextInput(
         label="Motivo do banimento",
         style=discord.TextStyle.paragraph,
         required=True,
-        max_length=500
+        max_length=4000
     )
 
     def __init__(self, membro: discord.Member):
@@ -225,10 +225,14 @@ class BanModal(Modal, title="Banir Membro"):
 
     async def on_submit(self, interaction: discord.Interaction):
 
+        embed_dm = discord.Embed(
+            title="Você foi banido do servidor",
+            description=f"**Motivo:**\n{self.motivo.value}",
+            color=discord.Color.red()
+        )
+
         try:
-            await self.membro.send(
-                f"🚫 Você foi banido do servidor.\n\nMotivo:\n{self.motivo.value}"
-            )
+            await self.membro.send(embed=embed_dm)
         except:
             pass
 
@@ -241,11 +245,11 @@ class BanModal(Modal, title="Banir Membro"):
             )
 
         embed = discord.Embed(
-            title="🚫 Banimento Executado",
+            title="🚫 Registro de Banimento",
             description=(
                 f"**Usuário:** {self.membro.mention}\n"
-                f"**Executor:** {interaction.user.mention}\n"
-                f"**Motivo:** {self.motivo.value}"
+                f"**Responsável:** {interaction.user.mention}\n\n"
+                f"**Motivo:**\n{self.motivo.value}"
             ),
             color=discord.Color.red(),
             timestamp=discord.utils.utcnow()
@@ -259,7 +263,7 @@ class BanModal(Modal, title="Banir Membro"):
             await canal_log.send(embed=embed)
 
         await interaction.response.send_message(
-            "🔨 Usuário banido com sucesso.",
+            "🔨 Banimento executado.",
             ephemeral=True
         )
 
@@ -279,7 +283,7 @@ async def ban(interaction: discord.Interaction, membro: discord.Member):
             ephemeral=True
         )
 
-    await interaction.response.send_modal(BanModal(membro))      
+    await interaction.response.send_modal(BanModal(membro))
 
 # ============================
 # SLASH COMMANDS
