@@ -21,7 +21,7 @@ GUILD_ID = 1343398652336537654
 
 VERIFY_CHANNEL_ID = 1343398652349255758
 LOG_CHANNEL_ID = 1450001931278745640
-LOG_ADV = 1343398653301358625
+LOG_ADV = 1475227661507891270
 LOG_BAN = 1343398653301358625
 
 ROLE_VERIFY_ID = 1345435302285545652
@@ -120,88 +120,166 @@ async def enviar_painel(guild: discord.Guild):
             pass
 
 # ============================
-#      SISTEMA DE ADVs
+# MODAL ADV
 # ============================
-@bot.tree.command(name="adv", description="Aplica advertência.", guild=discord.Object(id=GUILD_ID))
-async def adv(interaction: discord.Interaction, membro: discord.Member, motivo: str):
+class AdvModal(Modal, title="Aplicar Advertência"):
+
+    motivo = TextInput(
+        label="Motivo da advertência",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        max_length=500
+    )
+
+    def __init__(self, membro: discord.Member):
+        super().__init__()
+        self.membro = membro
+
+    async def on_submit(self, interaction: discord.Interaction):
+
+        adv1 = interaction.guild.get_role(ID_CARGO_ADV1)
+        adv2 = interaction.guild.get_role(ID_CARGO_ADV2)
+        adv3 = interaction.guild.get_role(ID_CARGO_ADV3)
+        banido = interaction.guild.get_role(ID_CARGO_BANIDO)
+
+        if banido in self.membro.roles:
+            return await interaction.response.send_message(
+                "⚠ Esse membro já está banido.",
+                ephemeral=True
+            )
+
+        if adv3 in self.membro.roles:
+            await self.membro.remove_roles(adv3)
+            await self.membro.add_roles(banido)
+            status = "🚫 4ª advertência → BANIDO"
+        elif adv2 in self.membro.roles:
+            await self.membro.remove_roles(adv2)
+            await self.membro.add_roles(adv3)
+            status = "⚠ 3ª advertência aplicada"
+        elif adv1 in self.membro.roles:
+            await self.membro.remove_roles(adv1)
+            await self.membro.add_roles(adv2)
+            status = "⚠ 2ª advertência aplicada"
+        else:
+            await self.membro.add_roles(adv1)
+            status = "⚠ 1ª advertência aplicada"
+
+        embed = discord.Embed(
+            title="Sistema Disciplinar",
+            description=(
+                f"**Policial:** {self.membro.mention}\n"
+                f"**Aplicado por:** {interaction.user.mention}\n"
+                f"**Motivo:** {self.motivo.value}\n\n"
+                f"{status}"
+            ),
+            color=discord.Color.orange(),
+            timestamp=discord.utils.utcnow()
+        )
+
+        embed.set_thumbnail(url=self.membro.display_avatar.url)
+        embed.set_image(url="https://i.imgur.com/Zs6JYpD.png")
+
+        canal_log = interaction.guild.get_channel(LOG_ADV)
+        if canal_log:
+            await canal_log.send(embed=embed)
+
+        await interaction.response.send_message(
+            "✅ Advertência aplicada com sucesso.",
+            ephemeral=True
+        )
+
+
+# ============================
+# COMANDO ADV
+# ============================
+@bot.tree.command(name="adv", description="Aplicar advertência.", guild=discord.Object(id=GUILD_ID))
+async def adv(interaction: discord.Interaction, membro: discord.Member):
+
     if not await require_authorized(interaction):
         return
 
     if not interaction.user.guild_permissions.kick_members:
         return await interaction.response.send_message(
-            "❌ Você precisa de permissão para expulsar (kick) para aplicar advertências.",
+            "❌ Você precisa da permissão de kick.",
             ephemeral=True
         )
 
-    adv1 = interaction.guild.get_role(ID_CARGO_ADV1)
-    adv2 = interaction.guild.get_role(ID_CARGO_ADV2)
-    adv3 = interaction.guild.get_role(ID_CARGO_ADV3)
-    banido = interaction.guild.get_role(ID_CARGO_BANIDO)
+    await interaction.response.send_modal(AdvModal(membro))
 
-    if banido in membro.roles:
-        return await interaction.response.send_message("⚠ Esse membro já está banido.", ephemeral=True)
 
-    if adv3 in membro.roles:
-        try:
-            await membro.remove_roles(adv3)
-            await membro.add_roles(banido)
-            msg = "🚫 4ª advertência → BANIDO"
-        except Exception:
-            return await interaction.response.send_message("❌ Erro ao atualizar cargos.", ephemeral=True)
-    elif adv2 in membro.roles:
-        await membro.remove_roles(adv2)
-        await membro.add_roles(adv3)
-        msg = "⚠ 3ª advertência aplicada!"
-    elif adv1 in membro.roles:
-        await membro.remove_roles(adv1)
-        await membro.add_roles(adv2)
-        msg = "⚠ 2ª advertência aplicada!"
-    else:
-        await membro.add_roles(adv1)
-        msg = "⚠ 1ª advertência aplicada!"
+# ============================
+# MODAL BAN
+# ============================
+class BanModal(Modal, title="Banir Membro"):
 
-    await interaction.response.send_message(msg, ephemeral=True)
-
-    # LOG ADV
-    embed = discord.Embed(
-        title="⚠ Advertência aplicada",
-        description=f"**Membro:** {membro.mention}\n**Por:** {interaction.user.mention}\n**Motivo:** {motivo}",
-        color=discord.Color.orange(),
-        timestamp=discord.utils.utcnow()
+    motivo = TextInput(
+        label="Motivo do banimento",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        max_length=500
     )
 
-    canal_log = interaction.guild.get_channel(LOG_ADV)
-    if canal_log:
-        await canal_log.send(embed=embed)
+    def __init__(self, membro: discord.Member):
+        super().__init__()
+        self.membro = membro
+
+    async def on_submit(self, interaction: discord.Interaction):
+
+        try:
+            await self.membro.send(
+                f"🚫 Você foi banido do servidor.\n\nMotivo:\n{self.motivo.value}"
+            )
+        except:
+            pass
+
+        try:
+            await self.membro.ban(reason=self.motivo.value)
+        except:
+            return await interaction.response.send_message(
+                "❌ Não consegui banir o usuário.",
+                ephemeral=True
+            )
+
+        embed = discord.Embed(
+            title="🚫 Banimento Executado",
+            description=(
+                f"**Usuário:** {self.membro.mention}\n"
+                f"**Executor:** {interaction.user.mention}\n"
+                f"**Motivo:** {self.motivo.value}"
+            ),
+            color=discord.Color.red(),
+            timestamp=discord.utils.utcnow()
+        )
+
+        embed.set_thumbnail(url=self.membro.display_avatar.url)
+        embed.set_image(url="https://i.imgur.com/8B7QFQH.png")
+
+        canal_log = interaction.guild.get_channel(LOG_BAN)
+        if canal_log:
+            await canal_log.send(embed=embed)
+
+        await interaction.response.send_message(
+            "🔨 Usuário banido com sucesso.",
+            ephemeral=True
+        )
 
 
 # ============================
-#            BAN
+# COMANDO BAN
 # ============================
-@bot.tree.command(name="ban", description="Bane um membro.", guild=discord.Object(id=GUILD_ID))
-async def ban(interaction: discord.Interaction, membro: discord.Member, motivo: str):
+@bot.tree.command(name="ban", description="Banir membro.", guild=discord.Object(id=GUILD_ID))
+async def ban(interaction: discord.Interaction, membro: discord.Member):
+
     if not await require_authorized(interaction):
         return
 
     if not interaction.user.guild_permissions.ban_members:
-        return await interaction.response.send_message("❌ Você precisa da permissão de banir.", ephemeral=True)
+        return await interaction.response.send_message(
+            "❌ Você precisa da permissão de ban.",
+            ephemeral=True
+        )
 
-    try:
-        await membro.ban(reason=motivo)
-        await interaction.response.send_message(f"🔨 {membro.mention} banido!", ephemeral=True)
-    except discord.Forbidden:
-        return await interaction.response.send_message("❌ O bot não pode banir esse usuário.", ephemeral=True)
-
-    embed = discord.Embed(
-        title="🚫 Membro Banido",
-        description=f"**Membro:** {membro.mention}\n**Por:** {interaction.user.mention}\n**Motivo:** {motivo}",
-        color=discord.Color.red(),
-        timestamp=discord.utils.utcnow()
-    )
-
-    canal_log = interaction.guild.get_channel(LOG_BAN)
-    if canal_log:
-        await canal_log.send(embed=embed)       
+    await interaction.response.send_modal(BanModal(membro))      
 
 # ============================
 # SLASH COMMANDS
