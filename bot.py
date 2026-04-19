@@ -699,7 +699,7 @@ async def on_ready():
 
     print(f"🔥 Bot conectado como {bot.user}")
 
-    guild = bot.get_guild(GUILD_ID)
+    guild = await bot.fetch_guild(GUILD_ID)
 
     if not guild:
         print("❌ Guild não encontrada.")
