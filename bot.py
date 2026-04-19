@@ -50,7 +50,7 @@ intents.message_content = True
 intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
-TOKEN = "MTM3MDYzMDA2NDg1MjU3MDE2Mg.G0Fvlp.ws7v67LTtfuoTwqqwEzHv6pKEuQ-R5aq3cNgTI"
+TOKEN = os.getenv("TOKEN")  # Certifique-se de definir o TOKEN no .env ou variáveis de ambiente
 
 # guard para não reenviar painel/verify em reconexões
 bot._ready_sent = False
