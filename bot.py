@@ -11,10 +11,6 @@ from discord.ext import commands
 from discord.ui import Modal, TextInput
 from datetime import datetime
 
-
-intents = discord.Intents.all()
-bot = commands.Bot(command_prefix="!", intents=intents)
-
 # ============================
 #   CONFIGURAÇÕES DO SERVIDOR
 # ============================
@@ -698,13 +694,11 @@ class ConfirmarOuFecharView(View):
 async def on_ready():
     print(f"🔥 Bot conectado como {bot.user}")
 
-    await bot.wait_until_ready()
-
     print("📡 Guilds que o bot está:")
     for g in bot.guilds:
         print(f"- {g.name} | ID: {g.id}")
 
-    guild = bot.get_guild(GUILD_ID)
+    guild = discord.utils.get(bot.guilds, id=GUILD_ID)
 
     if not guild:
         print(f"❌ Guild {GUILD_ID} NÃO encontrada.")
