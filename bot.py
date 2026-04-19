@@ -696,14 +696,20 @@ class ConfirmarOuFecharView(View):
 
 @bot.event
 async def on_ready():
-
     print(f"🔥 Bot conectado como {bot.user}")
+
+    await bot.wait_until_ready()  # garante cache carregado
 
     guild = bot.get_guild(GUILD_ID)
 
     if not guild:
-        print(f"❌ Guild {GUILD_ID} não encontrada. Verifique se o bot está no servidor.")
+        print(f"❌ Guild {GUILD_ID} não encontrada no cache.")
+        print("🔎 Guilds disponíveis:")
+        for g in bot.guilds:
+            print(f"- {g.name} | ID: {g.id}")
         return
+
+    print(f"✅ Conectado ao servidor: {guild.name}")
 
     # ================= PAINEL SET =================
 
