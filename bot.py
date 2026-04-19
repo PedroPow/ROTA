@@ -21,14 +21,14 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 GUILD_ID = 1492395180119293962
 
 VERIFY_CHANNEL_ID = 1495483263446286527
-LOG_CHANNEL_ID = 000000000000000000000
+LOG_CHANNEL_ID = 1494755106833567854
 
 ROLE_VERIFY_ID = 1492395666276745246
 ROLE_AUTOROLE_ID = 1492395701814952008
 ADMIN_ROLE_ID = 1492395647427416124
 
 
-PAINEL_CHANNEL_ID = 000000000000000000000
+PAINEL_CHANNEL_ID = 1494755106833567854
 
 
 # Advertências
@@ -699,10 +699,10 @@ async def on_ready():
 
     print(f"🔥 Bot conectado como {bot.user}")
 
-    guild = await bot.fetch_guild(GUILD_ID)
+    guild = bot.get_guild(GUILD_ID)
 
     if not guild:
-        print("❌ Guild não encontrada.")
+        print(f"❌ Guild {GUILD_ID} não encontrada. Verifique se o bot está no servidor.")
         return
 
     # ================= PAINEL SET =================
