@@ -420,6 +420,9 @@ solicitacoes_abertas = {}
 # ================= TICKET =================
 
 class TicketView(View):
+    def __init__(self):
+        super().__init__(timeout=None)  # 🔥 ESSENCIAL
+
     @discord.ui.button(
         label="Solicitar Funcional", 
         style=discord.ButtonStyle.secondary,
