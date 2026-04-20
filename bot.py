@@ -423,7 +423,8 @@ class TicketView(View):
     @discord.ui.button(
         label="Solicitar Funcional", 
         style=discord.ButtonStyle.secondary,
-        emoji="<:AMARELO:1495480160319836412>"
+        emoji="<:AMARELO:1495480160319836412>",
+        custom_id="ticket_abrir"
     )
     async def abrir_ticket(self, interaction: discord.Interaction, button: Button):
 
@@ -607,7 +608,12 @@ class ConfirmarOuFecharView(View):
         super().__init__(timeout=None)
         self.user_id = user_id
 
-    @discord.ui.button(label="Aceitar Funcional", style=discord.ButtonStyle.gray, emoji="<:AMARELO:1495480160319836412> ")
+    @discord.ui.button(
+            label="Aceitar Funcional", 
+            style=discord.ButtonStyle.gray, 
+            emoji="<:AMARELO:1495480160319836412> ",
+            custom_id="confirmar_set"
+            )
     async def confirmar(self, interaction: discord.Interaction, button: Button):
 
         dados = solicitacoes_abertas.pop(self.user_id, None)
@@ -667,7 +673,12 @@ class ConfirmarOuFecharView(View):
             await canal.delete()
 
 
-    @discord.ui.button(label="Recusar Funcional", style=discord.ButtonStyle.gray, emoji="<:x1:1495508233647952062>")
+    @discord.ui.button(
+            label="Recusar Funcional", 
+            style=discord.ButtonStyle.gray, 
+            emoji="<:x1:1495508233647952062>",
+            custom_id="recusar_set"
+            )
     async def cancelar(self, interaction: discord.Interaction, button: Button):
 
         dados = solicitacoes_abertas.pop(self.user_id, None)
@@ -693,6 +704,9 @@ class ConfirmarOuFecharView(View):
 @bot.event
 async def on_ready():
     print(f"🔥 Bot conectado como {bot.user}")
+
+    bot.add_view(TicketView())
+    bot.add_view(ConfirmarOuFecharView(user_id=0))  # user_id dummy    
 
     print("📡 Guilds que o bot está:")
     for g in bot.guilds:
