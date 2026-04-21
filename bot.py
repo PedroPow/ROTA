@@ -14,28 +14,28 @@ from datetime import datetime
 # ============================
 #   CONFIGURAÇÕES DO SERVIDOR
 # ============================
-GUILD_ID = 1473794022622363842
+GUILD_ID = 1492395180119293962
 
-VERIFY_CHANNEL_ID = 1496017827323318433
-LOG_CHANNEL_ID = 1495948374824845485
+VERIFY_CHANNEL_ID = 1495483263446286527
+LOG_CHANNEL_ID = 1494755106833567854
 
-ROLE_VERIFY_ID = 1473794022622363849
-ROLE_AUTOROLE_ID = 1473794022639407175
-ADMIN_ROLE_ID = 1495948491586015262
+ROLE_VERIFY_ID = 1492395666276745246
+ROLE_AUTOROLE_ID = 1492395701814952008
+ADMIN_ROLE_ID = 1492395647427416124
 
 
-PAINEL_CHANNEL_ID = 1496017847405772902
+PAINEL_CHANNEL_ID = 1494755106833567854
 
 
 # Advertências
-ID_CARGO_ADV1 = 1495945905826693171
-ID_CARGO_ADV2 = 1495947682009710732
-ID_CARGO_ADV3 = 1495947750532059328
-ID_CARGO_BANIDO = 1473794022622363850
+ID_CARGO_ADV1 = 1494421820219195513
+ID_CARGO_ADV2 = 1494421826208534588
+ID_CARGO_ADV3 = 1494421823180247170
+ID_CARGO_BANIDO = 1494422685462167652
 
 # Autorizados para comandos (todos os slash commands usarão estes cargos)
 CARGOS_AUTORIZADOS = [
-    1495948491586015262,
+    1492395647427416124,
 ]
 
 # ============================
@@ -46,7 +46,7 @@ intents.message_content = True
 intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
-TOKEN = os.getenv("TOKEN")  # Certifique-se de definir o TOKEN no .env ou variáveis de ambiente # Certifique-se de definir o TOKEN no .env ou variáveis de ambiente
+TOKEN = os.getenv("TOKEN")  # Certifique-se de definir o TOKEN no .env ou variáveis de ambiente
 
 # guard para não reenviar painel/verify em reconexões
 bot._ready_sent = False
@@ -70,7 +70,7 @@ async def enviar_log(guild, titulo, descricao, cor=discord.Color.green()):
     canal = guild.get_channel(LOG_CHANNEL_ID) if guild else None
     if canal:
         embed = discord.Embed(title=titulo, description=descricao, color=cor)
-        embed.set_footer(text="Sistema de Logs - PRF Virtual")
+        embed.set_footer(text="Sistema de Logs - Tropa do Trevo")
         try:
             await canal.send(embed=embed)
         except Exception:
@@ -91,6 +91,45 @@ async def require_authorized(interaction: discord.Interaction) -> bool:
         await interaction.response.send_message("❌ Você não tem permissão (cargo inválido).", ephemeral=True)
         return False
     return True
+
+# ============================
+#     PAINEL ADMINISTRATIVO
+# ============================
+class PainelAdminView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="📜 Ver Logs", style=discord.ButtonStyle.secondary, custom_id="view_logs")
+    async def view_logs(self, interaction: discord.Interaction, button: discord.ui.Button):
+        admin_role = interaction.guild.get_role(ADMIN_ROLE_ID)
+        if admin_role not in interaction.user.roles:
+            return await interaction.response.send_message("❌ Sem permissão.", ephemeral=True)
+
+        log = interaction.guild.get_channel(LOG_CHANNEL_ID)
+        if log:
+            await interaction.response.send_message(f"📌 Os logs estão em: {log.mention}", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ Canal de logs não encontrado.", ephemeral=True)
+
+async def enviar_painel(guild: discord.Guild):
+    if not guild:
+        return
+    canal = guild.get_channel(PAINEL_CHANNEL_ID)
+    if canal:
+        try:
+            await canal.purge(limit=10)
+        except Exception:
+            # se não tiver permissão para purge, tenta enviar mesmo assim
+            pass
+        embed = discord.Embed(
+            title="🛠 Painel Administrativo",
+            description="Gerencie o sistema abaixo:",
+            color=discord.Color.green()
+        )
+        try:
+            await canal.send(embed=embed, view=PainelAdminView())
+        except Exception:
+            pass
 
 # ============================
 #        COMANDO /clearall
@@ -141,7 +180,7 @@ async def clearall(interaction: discord.Interaction):
             f"**Canal limpo:** {canal.mention}\n"
             f"**Servidor:** `{guild.name}`"
         ),
-        color=discord.Color.yellow(),
+        color=discord.Color.orange(),
         timestamp=discord.utils.utcnow()
     )
     embed_log.set_footer(text=f"Ação: clearall")
@@ -249,7 +288,7 @@ async def adv(interaction: discord.Interaction, membro: discord.Member, motivo: 
         try:
             await membro.remove_roles(adv3)
             await membro.add_roles(banido)
-            msg = "🚫 4ª advertência → DEMITIDO"
+            msg = "🚫 4ª advertência → BANIDO"
         except Exception:
             return await interaction.response.send_message("❌ Erro ao atualizar cargos.", ephemeral=True)
     elif adv2 in membro.roles:
@@ -269,20 +308,11 @@ async def adv(interaction: discord.Interaction, membro: discord.Member, motivo: 
     # log
     embed = discord.Embed(
         title="⚠ Advertência aplicada",
-        description=f"**Membro:** {membro.mention}\n\n**Motivo:** {motivo}\n\n**Aplicada por:** {interaction.user.mention}",
-        color=discord.Color.yellow(),
+        description=f"**Membro:** {membro.mention}\n**Por:** {interaction.user.mention}\n**Motivo:** {motivo}",
+        color=discord.Color.orange(),
         timestamp=discord.utils.utcnow()
     )
-
-    embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1444735189765849320/1495965745400516708/PRF.png?ex=69e82a2b&is=69e6d8ab&hm=4874fa132517e00dc46de34d3c751c5bd6cf273b072f26d39a2ac2b97f346f6f&\n")
-
-
-    embed.set_image(url="https://cdn.discordapp.com/attachments/1444735189765849320/1495987937299533824/PRF_FAIXA_2.png?ex=69e83ed6&is=69e6ed56&hm=83ee4ba1543022157934325da3557a8339ed385de55c1a2344e9f54f8f26584a&")
-    embed.set_footer(text="Batalhão PRF Virtual® Todos direitos reservados.")
-        
-    await enviar_log_embed(interaction.guild, embed)   
-    
-         
+    await enviar_log_embed(interaction.guild, embed)        
 
 # ============================
 #            BAN
@@ -313,15 +343,15 @@ async def ban(interaction: discord.Interaction, membro: discord.Member, motivo: 
 # ================= CONFIG =================
 
 
-CANALETA_SOLICITAR_SET_ID = 1473794023343915085
-CARGO_NOVATO_ID = 1473794022622363849   
-CATEGORIA_TICKET_ID = 1473794023343915082
+CANALETA_SOLICITAR_SET_ID = 1492395719607320636
+CARGO_NOVATO_ID = 1492395701814952008
+CATEGORIA_TICKET_ID = 1494761202948243559
 
 # Canal de logs exclusivo ROTA
-CANAL_LOGS_ROTA = 1495945742290911302
+CANAL_LOGS_ROTA = 1495483263446286527
 
 # Cargo da companhia ROTA
-CARGO_ROTA_ID = 1473794022639407175
+CARGO_ROTA_ID = 1492395666276745246
 
 CARGO_1CIA_ID = 1495526378601189456
 CARGO_2CIA_ID = 1495526435656437861
@@ -329,56 +359,57 @@ CARGO_2CIA_ID = 1495526435656437861
 # ================= PATENTES ROTA =================
 
 PATENTES_ROTA = {
-    "AGENTE 3° CLASSE": {
-        "roles": [1473794022651986023,]
-        
+    "Soldado de 1º Classe PM": {
+        "roles": [1492395659477647481, 1492395657762439279],
+        "emoji": "<:SD:1495511851969282249>"
     },
-    "AGENTE 2° CLASSE": {
-        "roles": [1473794022651986024,]
+    "Cabo PM": {
+        "roles": [1492395658617815220, 1492395657762439279],
+        "emoji": "<:CABO:1495511811699638525>"
 
     },
-    "AGENTE 1° CLASSE": {
-        "roles": [1473794022651986025,]
-        
+    "Aluno-Sargento PM": {
+        "roles": [1494423857564749874, 1492395651718184980],
+        "emoji": "<:AlunoSargento:1495511772256538654>"
     },
-    "AGENTE ESPECIAL": {
-        "roles": [1473794022651986026,]
-        
+    "3º Sargento PM": {
+        "roles": [1492395656529186847, 1492395651718184980],
+        "emoji": "<:3SGT:1495510521690980444>"
     },
-    "INSPETOR / SUPERVISOR OPERCIONAL": {
-        "roles": [1473794022651986027,]
-        
+    "2º Sargento PM": {
+        "roles": [1492395655732400160, 1492395651718184980],
+        "emoji": "<:2SGT:1495510481161683004>"
     },
-    "COORDENADOR OPERACIONAL": {
-        "roles": [1473794022651986028,]
-        
+    "1º Sargento PM": {
+        "roles": [1492395654817906811, 1492395651718184980],
+        "emoji": "<:1SGT:1495510428032176210>"
     },
-    "CORREGEDOR(A)": {
-        "roles": [1473794022651986031,]
-        
+    "Sub-Tenente PM": {
+        "roles": [1492395652767027331, 1492395651718184980],
+        "emoji": "<:SUBTEN:1495510380540334080>"
     },
-    "SUPERVISOR REGIONAL": {
-        "roles": [1473794022651986030,]
-        
+    "Aluno-Oficial PM": {
+        "roles": [1494424186964279327, 1492395642843299952],
+        "emoji": "<:AlunoOfI:1495510303046111333>"
     },
-    "SUBDIRETOR": {
-        "roles": [1473794022651986032,]
-        
-    },
-
-    "DIRETOR DE DEPARTAMENTO": {
-        "roles": [1473794022664306771,]
-        
+    "Aspirante a Oficial PM": {
+        "roles": [1492395650657030236, 1492395642843299952],
+        "emoji": "<:ASPOFC:1495510195512672438>"
     },
 
-    "DIRETOR ADJUNTO": {
-        "roles": [1473794022664306772,]
-       
+    "2º Tenente PM": {
+        "roles": [1492395649100939386, 1492395642843299952],
+        "emoji": "<:2TENENTE:1495509369817923855>"
     },
 
-    "DIRETOR GERAL": {
-        "roles": [1473794022664306773,]
-        
+    "1º Tenente PM": {
+        "roles": [1492395648014876733, 1492395642843299952],
+        "emoji": "<:1TENENTE:1495509263487996154>"  
+    },
+
+    "Capitão PM": {
+        "roles": [1492395647427416124, 1492395642843299952],
+        "emoji": "<:CAPITO:1495509192465973258>"
     },
 
 
@@ -447,7 +478,7 @@ class TicketView(View):
             color=discord.Color.yellow()
         )
 
-        embed.set_footer(text="• Batalhão PRF Virtual® Todos direitos reservados.")
+        embed.set_footer(text="• Batalhão FT Virtual® Todos direitos reservados.")
 
         # mensagem dentro do ticket
         await canal.send(
@@ -474,10 +505,10 @@ class SelectPatente(Select):
                 discord.SelectOption(
                     label=nome,
                     value=nome,
-                    
+                    emoji=discord.PartialEmoji.from_str(dados["emoji"])
                 )
             )
-        super().__init__(placeholder="selecione sua divisão de atuação", options=options)
+        super().__init__(placeholder="Escolha sua patente", options=options)
 
     async def callback(self, interaction: discord.Interaction):
         patente_nome = self.values[0]
@@ -488,7 +519,7 @@ class SelectPatente(Select):
         view.add_item(SelectCIA(self.user_id, patente_nome, patente_ids))
 
         await interaction.response.send_message(
-            "Abra o próximo menu para escolher sua patente:",
+            "Abra o próximo menu para escolher sua companhia:",
             view=view,
             ephemeral=True
         )       
@@ -502,16 +533,12 @@ class SelectCIA(Select):
         self.patente_ids = patente_ids
 
         options = [
-            discord.SelectOption(label="POLICIA RODOVIÁRIA FEDERAL - PRF", value="PRF", emoji="<:PRF:1495964314539130980>"),
-            discord.SelectOption(label="NÚCLEO DE OPERAÇÕES ESPECIAIS - NOE", value="NOE", emoji="<:NOE:1495964410261405818>"),
-            discord.SelectOption(label="GRUPO DE PATRULHAMENTO MOTOCICLETA - GPM", value="GPM", emoji="<:GTM1:1495964467710787756>"),
-            discord.SelectOption(label="GRUPO DE PATRULHAMENTO TÁTICO - GPT", value="GPT", emoji="<:GPT:1495964368238542909>"),
-            discord.SelectOption(label="GRUPO DE RESPOSTA RÁPIDA - GRR", value="GRR", emoji="<:GRR:1495964391487836232>"),
-            discord.SelectOption(label="DIVISÃO DE OPERAÇÕES AÉREAS - DOA", value="DOA", emoji="<:DOA:1495959857960980531>"),
+            discord.SelectOption(label="1° CIA", value="1CIA"),
+            discord.SelectOption(label="2° CIA", value="2CIA"),
         ]
 
         super().__init__(
-            placeholder="Escolha sua divisão de atuação",
+            placeholder="Escolha sua CIA",
             options=options
         )
 
@@ -567,11 +594,9 @@ class DadosPessoaisModal(Modal, title="Registro do Policial"):
             color=discord.Color.yellow()
         )
 
-        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1444735189765849320/1495965745400516708/PRF.png?ex=69e82a2b&is=69e6d8ab&hm=4874fa132517e00dc46de34d3c751c5bd6cf273b072f26d39a2ac2b97f346f6f&\n")
-
-
-        embed.set_image(url="https://cdn.discordapp.com/attachments/1444735189765849320/1495987937299533824/PRF_FAIXA_2.png?ex=69e83ed6&is=69e6ed56&hm=83ee4ba1543022157934325da3557a8339ed385de55c1a2344e9f54f8f26584a&")
-        embed.set_footer(text="Batalhão PRF Virtual® Todos direitos reservados.")
+        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1444735189765849320/1495479496084557834/FT.png?ex=69e66550&is=69e513d0&hm=5a9f94eb8e712eb3d8d1b13346113bf5c0b0d1c33ede66a3b0dd215f53b32f3b&\n")
+        embed.set_image(url="https://regiaonoroeste.com/wp-content/uploads/2025/06/forca-tatica-droga.jpg   ")
+        embed.set_footer(text="Batalhão FT Virtual® Todos direitos reservados.")
 
         canal_logs = await interaction.client.fetch_channel(CANAL_LOGS_ROTA)
         await canal_logs.send(embed=embed, view=ConfirmarOuFecharView(self.user_id))
@@ -601,7 +626,7 @@ class ConfirmarOuFecharView(View):
 
         membro = interaction.guild.get_member(self.user_id)
 
-        novo_apelido = f"{dados['cia']} | {dados['nome']} - {dados['passaporte']}"
+        novo_apelido = f"#{dados['passaporte']} | {dados['nome']}"
 
         try:
             await membro.edit(nick=novo_apelido)
@@ -686,9 +711,8 @@ async def on_ready():
     bot.add_view(TicketView())
     bot.add_view(ConfirmarOuFecharView(user_id=0))  # user_id dummy    
 
-    print("📡 Guilds que o bot está:")
-    for g in bot.guilds:
-        print(f"- {g.name} | ID: {g.id}")
+    print(f"Bot: {bot.user} | ID: {bot.user.id}")
+    print(f"GUILD CONFIG: {GUILD_ID}")
 
     guild = discord.utils.get(bot.guilds, id=GUILD_ID)
 
@@ -719,19 +743,17 @@ async def on_ready():
             "• Após a solicitação **AGUARDE**\n"            
             "• Apenas maiores de 18 anos\n"
             "• Todas as alterações são **registradas**\n\n"
-            "• Caso tenha duvidas <#1495953861406363799>\n\n"                       
+            "• Caso tenha duvidas <#1494767109316546663>\n\n"                       
                          ),
             color=discord.Color.yellow()
         )
 
         # 2️⃣ Configurar
-        embed.set_image(url="https://cdn.discordapp.com/attachments/1444735189765849320/1495987937299533824/PRF_FAIXA_2.png?ex=69e83ed6&is=69e6ed56&hm=83ee4ba1543022157934325da3557a8339ed385de55c1a2344e9f54f8f26584a&") # IMAGEM RETANGULAR ABAIXO
+        embed.set_image(url="https://www.cidadaonet.com.br/storage/conteudo/large/398092680684acacc4a357.jpg")
         
 
-        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1444735189765849320/1495965745400516708/PRF.png?ex=69e82a2b&is=69e6d8ab&hm=4874fa132517e00dc46de34d3c751c5bd6cf273b072f26d39a2ac2b97f346f6f&\n") # IMAGEM QUADRADA A DIREITA
-
-
-        embed.set_footer(text="Batalhão PRF Virtual® Todos direitos reservados.")
+        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1444735189765849320/1495479496084557834/FT.png?ex=69e66550&is=69e513d0&hm=5a9f94eb8e712eb3d8d1b13346113bf5c0b0d1c33ede66a3b0dd215f53b32f3b&\n")
+        embed.set_footer(text="Batalhão FT Virtual® Todos direitos reservados.")
         
 
         # 3️⃣ Enviar
