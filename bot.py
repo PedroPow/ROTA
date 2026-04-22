@@ -621,12 +621,16 @@ class ConfirmarOuFecharView(View):
     async def confirmar(self, interaction: discord.Interaction, button: Button):
 
         dados = solicitacoes_abertas.pop(self.user_id, None)
+
         if not dados:
             await interaction.response.send_message("❌ Solicitação não encontrada.", ephemeral=True)
             return
 
+        membro = interaction.guild.get_member(self.user_id)
+
         if not membro:
-            return await interaction.response.send_message("❌ Membro não encontrado.", ephemeral=True)
+            await interaction.response.send_message("❌ Membro não encontrado.", ephemeral=True)
+            return
 
         novo_apelido = f"#{dados['passaporte']} | {dados['nome']}"
 
