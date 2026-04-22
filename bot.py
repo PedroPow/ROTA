@@ -3,12 +3,9 @@ from discord.ext import commands
 from discord.ui import View, Button, Select, Modal, TextInput
 from discord import Embed
 import asyncio
-import discord
 import aiohttp
 import io
 import os
-from discord.ext import commands
-from discord.ui import Modal, TextInput
 from datetime import datetime
 
 # ============================
@@ -151,7 +148,7 @@ async def clearall(interaction: discord.Interaction):
     # limpa mensagens
     try:
         # limite=None as vezes falha em alguns builds, tenta em bloco
-        await canal.purge(limit=None)
+        await canal.purge(limit=100)
     except Exception:
         try:
             await canal.purge()
@@ -594,11 +591,15 @@ class DadosPessoaisModal(Modal, title="Registro do Policial"):
             color=discord.Color.yellow()
         )
 
-        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1444735189765849320/1495479496084557834/FT.png?ex=69e66550&is=69e513d0&hm=5a9f94eb8e712eb3d8d1b13346113bf5c0b0d1c33ede66a3b0dd215f53b32f3b&\n")
+        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1444735189765849320/1495479496084557834/FT.png?ex=69e66550&is=69e513d0&hm=5a9f94eb8e712eb3d8d1b13346113bf5c0b0d1c33ede66a3b0dd215f53b32f3b&")
         embed.set_image(url="https://regiaonoroeste.com/wp-content/uploads/2025/06/forca-tatica-droga.jpg   ")
         embed.set_footer(text="Batalhão FT Virtual® Todos direitos reservados.")
 
-        canal_logs = await interaction.client.fetch_channel(CANAL_LOGS_ROTA)
+        try:
+            canal_logs = await interaction.client.fetch_channel(CANAL_LOGS_ROTA)
+        except:
+            await interaction.followup.send("❌ Canal de logs não encontrado.", ephemeral=True)
+            return
         await canal_logs.send(embed=embed, view=ConfirmarOuFecharView(self.user_id))
 
         await interaction.followup.send("✅ Solicitação enviada para avaliação.", ephemeral=True)
@@ -624,14 +625,15 @@ class ConfirmarOuFecharView(View):
             await interaction.response.send_message("❌ Solicitação não encontrada.", ephemeral=True)
             return
 
-        membro = interaction.guild.get_member(self.user_id)
+        if not membro:
+            return await interaction.response.send_message("❌ Membro não encontrado.", ephemeral=True)
 
         novo_apelido = f"#{dados['passaporte']} | {dados['nome']}"
 
         try:
             await membro.edit(nick=novo_apelido)
-        except:
-            pass
+        except Exception as e:
+            print(f"Erro ao alterar nick: {e}")
 
         novato = interaction.guild.get_role(CARGO_NOVATO_ID)
         if novato in membro.roles:
@@ -752,7 +754,7 @@ async def on_ready():
         embed.set_image(url="https://www.cidadaonet.com.br/storage/conteudo/large/398092680684acacc4a357.jpg")
         
 
-        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1444735189765849320/1495479496084557834/FT.png?ex=69e66550&is=69e513d0&hm=5a9f94eb8e712eb3d8d1b13346113bf5c0b0d1c33ede66a3b0dd215f53b32f3b&\n")
+        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1444735189765849320/1495479496084557834/FT.png?ex=69e66550&is=69e513d0&hm=5a9f94eb8e712eb3d8d1b13346113bf5c0b0d1c33ede66a3b0dd215f53b32f3b&")
         embed.set_footer(text="Batalhão FT Virtual® Todos direitos reservados.")
         
 
