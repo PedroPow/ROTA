@@ -552,6 +552,7 @@ class SelectCIA(Select):
             )
         )     
 
+
 # ================= MODAL =================
 
 class DadosPessoaisModal(Modal, title="Registro do Policial"):
@@ -572,11 +573,15 @@ class DadosPessoaisModal(Modal, title="Registro do Policial"):
         nome = self.nome.value.strip()
         passaporte = self.passaporte.value.strip()
 
+        # DEFINE O ID DO CARGO DA CIA ESCOLHIDA
+        cargo_cia_id = CARGO_1CIA_ID if self.cia == "1CIA" else CARGO_2CIA_ID
+
         solicitacoes_abertas[self.user_id].update({
             "patente_id": self.patente_id,
             "nome": nome,
             "passaporte": passaporte,
-            "cia": self.cia
+            "cia": self.cia,
+            "cargo_cia_id": cargo_cia_id
         })
 
         embed = Embed(
@@ -586,7 +591,7 @@ class DadosPessoaisModal(Modal, title="Registro do Policial"):
                 f"**Nome:** {nome}\n"
                 f"**R.E:** {passaporte}\n"
                 f"**Companhia:** {self.cia}\n"
-                f"**Patente:**  {self.patente_nome}"
+                f"**Patente:** {self.patente_nome}"
             ),
             color=discord.Color.yellow()
         )
@@ -613,81 +618,80 @@ class ConfirmarOuFecharView(View):
         self.user_id = user_id
 
     @discord.ui.button(
-            label="Aceitar Funcional", 
-            style=discord.ButtonStyle.gray, 
-            emoji="<:AMARELO:1495480160319836412> ",
-            custom_id="confirmar_set"
-            )
+        label="Aceitar Funcional",
+        style=discord.ButtonStyle.gray,
+        emoji="<:AMARELO:1495480160319836412>",
+        custom_id="confirmar_set"
+    )
     async def confirmar(self, interaction: discord.Interaction, button: Button):
 
         dados = solicitacoes_abertas.pop(self.user_id, None)
 
         if not dados:
-            await interaction.response.send_message("❌ Solicitação não encontrada.", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ Solicitação não encontrada.",
+                ephemeral=True
+            )
             return
 
         membro = interaction.guild.get_member(self.user_id)
 
         if not membro:
-            await interaction.response.send_message("❌ Membro não encontrado.", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ Membro não encontrado.",
+                ephemeral=True
+            )
             return
 
         novo_apelido = f"#{dados['passaporte']} | {dados['nome']}"
 
         try:
             await membro.edit(nick=novo_apelido)
-        except Exception as e:
-            print(f"Erro ao alterar nick: {e}")
-
-        novato = interaction.guild.get_role(CARGO_NOVATO_ID)
-        if novato in membro.roles:
-            await membro.remove_roles(novato)
-
-        cargos_ids = dados['patente_id']
+        except:
+            pass
 
         cargos = []
-        for role_id in cargos_ids:
-            role = interaction.guild.get_role(role_id)
-            if role:
-                cargos.append(role)
 
+        # cargos da patente
+        for role_id in dados["patente_id"]:
+            cargo = interaction.guild.get_role(role_id)
+            if cargo:
+                cargos.append(cargo)
+
+        # cargo ROTA
         cargo_rota = interaction.guild.get_role(CARGO_ROTA_ID)
         if cargo_rota:
             cargos.append(cargo_rota)
 
-        if not cargos:
-            return await interaction.response.send_message(
-                "❌ Nenhum cargo válido encontrado.",
-                ephemeral=True
-            )
+        # cargo CIA escolhida
+        cargo_cia = interaction.guild.get_role(dados["cargo_cia_id"])
+        if cargo_cia:
+            cargos.append(cargo_cia)
 
         await membro.add_roles(*cargos)
 
-        agora = datetime.now().strftime("%d/%m/%Y às %H:%M")
-
         embed = interaction.message.embeds[0]
         embed.color = discord.Color.green()
-        embed.description += (
-            f"\n\n**Aprovado por:** {interaction.user.mention}"
-            f"\n**ID do aprovador:** `{interaction.user.id}`"
-            f"\n**Data:** {agora}"
-        )
+        embed.description += f"\n\n✅ **Aprovado por:** {interaction.user.mention}"
 
         await interaction.message.edit(embed=embed, view=None)
-        await interaction.response.send_message("✅ SET confirmado.", ephemeral=True)
+
+        await interaction.response.send_message(
+            "✅ Funcional aprovada e cargos entregues.",
+            ephemeral=True
+        )
 
         canal = interaction.guild.get_channel(dados["canal_id"])
         if canal:
             await asyncio.sleep(5)
             await canal.delete()
 
-
     @discord.ui.button(
-            label="Recusar Funcional", 
-            style=discord.ButtonStyle.gray, 
-            emoji="<:x1:1495508233647952062>",
-            custom_id="recusar_set"
-            )
+        label="Recusar Funcional",
+        style=discord.ButtonStyle.gray,
+        emoji="<:x1:1495508233647952062>",
+        custom_id="recusar_set"
+    )
     async def cancelar(self, interaction: discord.Interaction, button: Button):
 
         dados = solicitacoes_abertas.pop(self.user_id, None)
@@ -698,15 +702,16 @@ class ConfirmarOuFecharView(View):
 
         await interaction.message.edit(embed=embed, view=None)
 
-        await interaction.response.send_message("🗑️ Solicitação cancelada.", ephemeral=True)
+        await interaction.response.send_message(
+            "🗑️ Solicitação cancelada.",
+            ephemeral=True
+        )
 
         if dados:
             canal = interaction.guild.get_channel(dados["canal_id"])
             if canal:
                 await asyncio.sleep(5)
                 await canal.delete()
-
-                
 
 # ================= READY =================
 
