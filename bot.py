@@ -6,34 +6,65 @@ import asyncio
 import aiohttp
 import io
 import os
-from datetime import datetime
+import json
+
+import database as db
 
 # ============================
 #   CONFIGURAÇÕES DO SERVIDOR
 # ============================
-GUILD_ID = 1492395180119293962
+GUILD_ID = 1343398652336537654
 
-VERIFY_CHANNEL_ID = 1495483263446286527
-LOG_CHANNEL_ID = 1494755106833567854
+VERIFY_CHANNEL_ID = 0  # Canal de verificação
 
-ROLE_VERIFY_ID = 1492395666276745246
-ROLE_AUTOROLE_ID = 1492395701814952008
-ADMIN_ROLE_ID = 1492395647427416124
+ROLE_VERIFY_ID = 1343645401051431017  # Cargo de verificado (CARGO: POLICIA MILITAR)
+ROLE_AUTOROLE_ID = 1345435302285545652  # Cargo de novato (CARGO: SEM SET)
+ADMIN_ROLE_ID = 1449998328334123208  # Cargo de administrador (CARGO: P/1)
 
+PAINEL_CHANNEL_ID = 0  # Canal do painel administrativo
 
-PAINEL_CHANNEL_ID = 1494755106833567854
-
+# ============================
+#   CANAIS DE LOG (1 por ação)
+# ============================
+# Cada comando/ação tem seu próprio canal de log.
+#
+# Como pegar o ID de um canal: Discord > Configurações > Avançado >
+# ativar "Modo desenvolvedor" > clique com o botão direito no canal >
+# "Copiar ID do Canal".
+LOG_CHANNEL_SISTEMA = 1450001931278745640
+LOG_CHANNEL_CLEARALL = 1540760853236813825
+LOG_CHANNEL_ADV = 1475227661507891270
+LOG_CHANNEL_BAN = 1343398653301358625
+LOG_CHANNEL_MENSAGEM = 1540762061338845235
+LOG_CHANNEL_FUNCIONAL_APROVADO = 1540761917638058015
+LOG_CHANNEL_FUNCIONAL_RECUSADO = 1540761917638058015
 
 # Advertências
-ID_CARGO_ADV1 = 1494421820219195513
-ID_CARGO_ADV2 = 1494421826208534588
-ID_CARGO_ADV3 = 1494421823180247170
-ID_CARGO_BANIDO = 1494422685462167652
+ID_CARGO_ADV1 = 1343788657760534619
+ID_CARGO_ADV2 = 1343647931743469620
+ID_CARGO_ADV3 = 1343648148861489247
+ID_CARGO_AFASTADO = 1343645850294947860
 
-# Autorizados para comandos (todos os slash commands usarão estes cargos)
+# Autorizados para comandos (todos os slash commands + botões de aprovação usam estes cargos)
 CARGOS_AUTORIZADOS = [
-    1492395647427416124,
+    1469854597802754058,  # VUNESP
 ]
+
+# ============================
+#   EMOJIS DAS MENSAGENS EPHEMERAL
+# ============================
+# Troque os valores abaixo por emojis customizados do seu servidor quando
+# quiser. Formato de emoji customizado: "<:nome:ID>" (ou "<a:nome:ID>" se
+# for animado). Exemplo:
+#   "sucesso": "<:sucesso:1234567890123456789>",
+EMOJIS = {
+    "sucesso": f"<:YES:1540777802935181444>",
+    "erro": f"<:111:1540791811310747759>",
+    "aviso": f"<:111:1540791811310747759>",
+    "info": f"<:111:1540791811310747759>",
+    "carregando": f"<:assumirticket:1540778869332906025>",
+    "lixeira": f"<:lixeira:1540778211074383932>",
+}
 
 # ============================
 #         BOT + INTENTS
@@ -43,51 +74,106 @@ intents.message_content = True
 intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
-TOKEN = os.getenv("TOKEN_ROTA")  # Certifique-se de definir o TOKEN no .env ou variáveis de ambiente
 
-# guard para não reenviar painel/verify em reconexões
+TOKEN = os.getenv("TOKEN_ROTA")  # Token do bot (variável de ambiente)
+
+# guard para não reenviar painel/verify e não re-sincronizar comandos em reconexões
 bot._ready_sent = False
+
+# ============================
+#   EMBED PADRÃO PARA MENSAGENS EPHEMERAL
+# ============================
+def embed_ephemeral(descricao: str, tipo: str = "info", titulo: str | None = None) -> discord.Embed:
+    """
+    Monta o embed amarelo padrão usado em TODAS as respostas ephemeral do bot.
+    'tipo' escolhe o emoji (ver dict EMOJIS lá em cima): sucesso, erro, aviso, info, carregando, lixeira.
+    """
+    emoji = EMOJIS.get(tipo, "")
+    texto = f"{emoji} {descricao}".strip()
+    embed = discord.Embed(description=texto, color=discord.Color.yellow())
+    if titulo:
+        embed.title = titulo
+    return embed
+
+
+def embed_status_credencial(aprovado: bool) -> discord.Embed:
+    """
+    Embed mostrado (ephemeral) para quem clicou em Aceitar/Recusar,
+    no mesmo estilo visual da referência enviada: título com ícone,
+    barra colorida na lateral e uma descrição curta e direta.
+    """
+    if aprovado:
+        embed = discord.Embed(
+            title=f"<:YES:1540777802935181444> Credencial Aprovada",
+            description=(
+                "A solicitação foi aprovada com sucesso. Os cargos foram "
+                "atribuídos ao usuário e o apelido foi atualizado."
+            ),
+            color=discord.Color.green(),
+        )
+    else:
+        embed = discord.Embed(
+            title=f"<:111:1540791811310747759> Credencial Recusada",
+            description=(
+                "A solicitação foi recusada com sucesso. O usuário foi "
+                "desbloqueado para reenviar se desejar."
+            ),
+            color=discord.Color.red(),
+        )
+    return embed
+
 
 # ============================
 #        SISTEMA DE LOGS
 # ============================
-async def enviar_log_embed(guild: discord.Guild, embed: discord.Embed):
-    """Envia embed para o canal de logs se existir."""
+# Log separado por ação: cada comando manda pro seu próprio canal
+# (definido em LOG_CHANNEL_* lá em cima), em vez de tudo cair junto
+# no mesmo lugar.
+
+async def enviar_log_canal(guild: discord.Guild, canal_id: int, embed: discord.Embed, contexto: str = ""):
     if not guild:
         return
-    canal = guild.get_channel(LOG_CHANNEL_ID)
-    if canal:
-        try:
-            await canal.send(embed=embed)
-        except Exception:
-            # evita crash por falta de permissões
-            return
+    if not canal_id:
+        print(f"⚠️ Canal de log não configurado para '{contexto}' (valor 0). Log não enviado.")
+        return
+    canal = guild.get_channel(canal_id)
+    if not canal:
+        print(f"⚠️ Canal de log '{contexto}' (ID {canal_id}) não encontrado no servidor.")
+        return
+    try:
+        await canal.send(embed=embed)
+    except Exception as e:
+        print(f"⚠️ Falha ao enviar log de '{contexto}': {e}")
+
+
+async def enviar_log_embed(guild: discord.Guild, embed: discord.Embed):
+    """Log geral do sistema (ex: bot iniciado). Mantido por compatibilidade."""
+    await enviar_log_canal(guild, LOG_CHANNEL_SISTEMA, embed, contexto="sistema")
+
 
 async def enviar_log(guild, titulo, descricao, cor=discord.Color.green()):
-    canal = guild.get_channel(LOG_CHANNEL_ID) if guild else None
-    if canal:
-        embed = discord.Embed(title=titulo, description=descricao, color=cor)
-        embed.set_footer(text="Sistema de Logs - Tropa do Trevo")
-        try:
-            await canal.send(embed=embed)
-        except Exception:
-            pass
+    embed = discord.Embed(title=titulo, description=descricao, color=cor)
+    embed.set_footer(text="Sistema de Logs - Tropa do Trevo")
+    await enviar_log_canal(guild, LOG_CHANNEL_SISTEMA, embed, contexto="sistema")
+
 
 # ============================
 #  HELPERS DE PERMISSÃO
 # ============================
 def has_authorized_role(member: discord.Member) -> bool:
-    """Checa se o membro possui pelo menos um dos cargos autorizados."""
     if not member or not hasattr(member, "roles"):
         return False
     return any(role.id in CARGOS_AUTORIZADOS for role in member.roles)
 
+
 async def require_authorized(interaction: discord.Interaction) -> bool:
-    """Verificação async (uso em comandos) — retorna True se autorizado."""
     if not has_authorized_role(interaction.user):
-        await interaction.response.send_message("❌ Você não tem permissão (cargo inválido).", ephemeral=True)
+        await interaction.response.send_message(
+            embed=embed_ephemeral("Você não tem permissão (cargo inválido).", "erro"), ephemeral=True
+        )
         return False
     return True
+
 
 # ============================
 #     PAINEL ADMINISTRATIVO
@@ -98,15 +184,31 @@ class PainelAdminView(discord.ui.View):
 
     @discord.ui.button(label="📜 Ver Logs", style=discord.ButtonStyle.secondary, custom_id="view_logs")
     async def view_logs(self, interaction: discord.Interaction, button: discord.ui.Button):
-        admin_role = interaction.guild.get_role(ADMIN_ROLE_ID)
-        if admin_role not in interaction.user.roles:
-            return await interaction.response.send_message("❌ Sem permissão.", ephemeral=True)
+        if not has_authorized_role(interaction.user):
+            return await interaction.response.send_message(embed=embed_ephemeral("Sem permissão.", "erro"), ephemeral=True)
 
-        log = interaction.guild.get_channel(LOG_CHANNEL_ID)
-        if log:
-            await interaction.response.send_message(f"📌 Os logs estão em: {log.mention}", ephemeral=True)
-        else:
-            await interaction.response.send_message("❌ Canal de logs não encontrado.", ephemeral=True)
+        canais = {
+            "Sistema": LOG_CHANNEL_SISTEMA,
+            "/clearall": LOG_CHANNEL_CLEARALL,
+            "/adv": LOG_CHANNEL_ADV,
+            "/ban": LOG_CHANNEL_BAN,
+            "/mensagem": LOG_CHANNEL_MENSAGEM,
+            "Funcional aprovado": LOG_CHANNEL_FUNCIONAL_APROVADO,
+            "Funcional recusado": LOG_CHANNEL_FUNCIONAL_RECUSADO,
+        }
+
+        linhas = []
+        for nome, canal_id in canais.items():
+            canal = interaction.guild.get_channel(canal_id) if canal_id else None
+            linhas.append(f"**{nome}:** {canal.mention if canal else '⚠️ não configurado'}")
+
+        embed = discord.Embed(
+            title="📜 Canais de Log",
+            description="\n".join(linhas),
+            color=discord.Color.yellow(),
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
 
 async def enviar_painel(guild: discord.Guild):
     if not guild:
@@ -116,73 +218,71 @@ async def enviar_painel(guild: discord.Guild):
         try:
             await canal.purge(limit=10)
         except Exception:
-            # se não tiver permissão para purge, tenta enviar mesmo assim
             pass
         embed = discord.Embed(
             title="🛠 Painel Administrativo",
             description="Gerencie o sistema abaixo:",
-            color=discord.Color.green()
+            color=discord.Color.yellow(),
         )
         try:
             await canal.send(embed=embed, view=PainelAdminView())
         except Exception:
             pass
 
+
 # ============================
 #        COMANDO /clearall
 # ============================
 @bot.tree.command(name="clearall", description="Apaga todas as mensagens do canal atual.", guild=discord.Object(id=GUILD_ID))
 async def clearall(interaction: discord.Interaction):
-    # validar cargo autorizado
     if not await require_authorized(interaction):
         return
 
     canal = interaction.channel
     guild = interaction.guild
     if canal is None or guild is None:
-        return await interaction.response.send_message("❌ Contexto inválido.", ephemeral=True)
+        return await interaction.response.send_message(embed=embed_ephemeral("Contexto inválido.", "erro"), ephemeral=True)
 
-    # responder rápido
-    await interaction.response.send_message(f"🧹 Limpando todas as mensagens do canal **{canal.name}**...", ephemeral=True)
+    await interaction.response.send_message(
+        embed=embed_ephemeral(f"Limpando todas as mensagens do canal **{canal.name}**...", "carregando"),
+        ephemeral=True,
+    )
 
-    # limpa mensagens
     try:
-        # limite=None as vezes falha em alguns builds, tenta em bloco
         await canal.purge(limit=100)
     except Exception:
         try:
             await canal.purge()
         except Exception:
-            # se tudo falhar, informa o usuário
             pass
 
-    # enviar confirmação no canal limpo (se permitido)
     try:
         embed_confirm = discord.Embed(
-            title="🧹 Canal Limpo",
+            title=f"<:lixeira:1540778211074383932> Canal Limpo",
             description=f"As mensagens do canal `{canal.name}` foram apagadas com sucesso!",
-            color=discord.Color.green()
+            color=discord.Color.yellow(),
         )
         await canal.send(embed=embed_confirm)
     except Exception:
-        # sem permissão para enviar no canal limpo — ignora
         pass
 
-    # preparar log detalhado e enviar para o canal de logs (LOG_CHANNEL_ID)
     embed_log = discord.Embed(
-        title="🧹 Log - Canal Limpo",
+        title=f"<:lixeira:1540778211074383932> Log - Canal Limpo",
         description=(
-            f"**Usuário:** {interaction.user.mention}\n"
-            f"**ID do usuário:** `{interaction.user.id}`\n"
-            f"**Canal limpo:** {canal.mention}\n"
-            f"**Servidor:** `{guild.name}`"
+            f"<:pessoas:1540780605237760050> **Usuário:** {interaction.user.mention}\n\n"
+            f"<:pessoas:1540780605237760050> **ID do usuário:** `{interaction.user.id}`\n\n"
+            f"<:lixeira:1540778211074383932> **Canal limpo:** {canal.mention}\n\n"
         ),
-        color=discord.Color.orange(),
-        timestamp=discord.utils.utcnow()
+        color=discord.Color.yellow(),
     )
-    embed_log.set_footer(text=f"Ação: clearall")
+    embed_log.set_thumbnail(
+        url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8b4418&is=6a89f298&hm=ccef0422a39e4382dc5e5b9858c859cb3a0dd81a22eac8f643b85ee6fa955c8f&"
+    )    
 
-    await enviar_log_embed(guild, embed_log)
+    embed_log.set_footer(icon_url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8b4418&is=6a89f298&hm=ccef0422a39e4382dc5e5b9858c859cb3a0dd81a22eac8f643b85ee6fa955c8f&", text="Batalhão 9° BPM/M Virtual® Todos direitos reservados.")
+
+    await enviar_log_canal(guild, LOG_CHANNEL_CLEARALL, embed_log, contexto="/clearall")
+
 
 # ============================
 #         MODAL /mensagem
@@ -192,35 +292,58 @@ class MensagemModal(Modal, title="📢 Enviar Mensagem"):
         label="Conteúdo da mensagem",
         style=discord.TextStyle.paragraph,
         required=True,
-        max_length=2000
+        max_length=2000,
     )
 
+    async def _logar_envio(self, interaction: discord.Interaction, qtd_anexos: int = 0):
+        embed_log = discord.Embed(
+            title=f"<:paineladmin:1540780905902374982> Log - Mensagem Enviada",
+            description=(
+                f"<:pessoas:1540780605237760050> **Usuário:** {interaction.user.mention}\n\n"
+                f"<:pessoas:1540780605237760050> **ID do usuário:** `{interaction.user.id}`\n\n"
+                f"<:paineladmin:1540780905902374982> **Canal:** {interaction.channel.mention}\n\n"
+                f"<:222:1540799996251865108>  **Anexos:** {qtd_anexos}"
+            ),
+            color=discord.Color.yellow(),
+        )
+
+        embed_log.set_thumbnail(
+            url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8b4418&is=6a89f298&hm=ccef0422a39e4382dc5e5b9858c859cb3a0dd81a22eac8f643b85ee6fa955c8f&"
+        )    
+
+        embed_log.set_footer(icon_url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8b4418&is=6a89f298&hm=ccef0422a39e4382dc5e5b9858c859cb3a0dd81a22eac8f643b85ee6fa955c8f&", text="Batalhão 9° BPM/M Virtual® Todos direitos reservados.")
+
+        embed_log.add_field(name=f"<:111:1540791811310747759> Conteúdo:",value=self.conteudo.value[:1024], inline=False)
+        await enviar_log_canal(interaction.guild, LOG_CHANNEL_MENSAGEM, embed_log, contexto="/mensagem")
+
     async def on_submit(self, interaction: discord.Interaction):
-        # checar autorização rapidamente
         if not has_authorized_role(interaction.user):
-            # interação ainda pode ser respondida
-            await interaction.response.send_message("❌ Você não tem permissão para usar este modal.", ephemeral=True)
+            await interaction.response.send_message(
+                embed=embed_ephemeral("Você não tem permissão para usar este modal.", "erro"), ephemeral=True
+            )
             return
 
-        await interaction.response.send_message("⏳ Enviando...", ephemeral=True)
+        await interaction.response.send_message(embed=embed_ephemeral("Enviando...", "carregando"), ephemeral=True)
 
         try:
             msg_inicial = await interaction.channel.send(self.conteudo.value)
         except Exception:
-            await interaction.followup.send("❌ Não consegui enviar a mensagem inicial (permissão).", ephemeral=True)
+            await interaction.followup.send(
+                embed=embed_ephemeral("Não consegui enviar a mensagem inicial (permissão).", "erro"), ephemeral=True
+            )
             return
 
         await interaction.followup.send(
-            "📎 Responda aquela mensagem com anexos em até 5 minutos.",
-            ephemeral=True
+            embed=embed_ephemeral("Responda aquela mensagem com anexos em até 5 minutos.", "info"),
+            ephemeral=True,
         )
 
         def check(m: discord.Message):
             return (
-                m.reference and
-                m.reference.message_id == msg_inicial.id and
-                m.author == interaction.user and
-                m.channel == interaction.channel
+                m.reference
+                and m.reference.message_id == msg_inicial.id
+                and m.author == interaction.user
+                and m.channel == interaction.channel
             )
 
         try:
@@ -235,7 +358,6 @@ class MensagemModal(Modal, title="📢 Enviar Mensagem"):
                     except Exception:
                         continue
 
-            # tenta deletar mensagens do usuário e a de confirmação
             try:
                 await msg_inicial.delete()
                 await reply.delete()
@@ -245,21 +367,30 @@ class MensagemModal(Modal, title="📢 Enviar Mensagem"):
             try:
                 await interaction.channel.send(content=self.conteudo.value, files=files)
             except Exception:
-                await interaction.followup.send("❌ Não consegui reenviar a mensagem (permissão).", ephemeral=True)
+                await interaction.followup.send(
+                    embed=embed_ephemeral("Não consegui reenviar a mensagem (permissão).", "erro"), ephemeral=True
+                )
+                return
+
+            await self._logar_envio(interaction, qtd_anexos=len(files))
 
         except asyncio.TimeoutError:
-            # tempo esgotado — só ignora
+            # a mensagem inicial (sem anexos) já foi enviada — loga mesmo assim
+            await self._logar_envio(interaction, qtd_anexos=0)
             try:
-                await interaction.followup.send("⏰ Tempo esgotado. Nenhum anexo recebido.", ephemeral=True)
+                await interaction.followup.send(
+                    embed=embed_ephemeral("Tempo esgotado. Nenhum anexo recebido.", "aviso"), ephemeral=True
+                )
             except Exception:
                 pass
+
 
 @bot.tree.command(name="mensagem", description="Enviar mensagem como o bot.", guild=discord.Object(id=GUILD_ID))
 async def mensagem(interaction: discord.Interaction):
     if not await require_authorized(interaction):
         return
-    # abrir modal
     await interaction.response.send_modal(MensagemModal())
+
 
 # ============================
 #      SISTEMA DE ADVs
@@ -269,47 +400,78 @@ async def adv(interaction: discord.Interaction, membro: discord.Member, motivo: 
     if not await require_authorized(interaction):
         return
 
-    # mantém checagem extra: só membros com permissão de kick podem aplicar adv (opcional)
     if not interaction.user.guild_permissions.kick_members:
-        return await interaction.response.send_message("❌ Você precisa de permissão para expulsar (kick) para aplicar advertências.", ephemeral=True)
+        return await interaction.response.send_message(
+            embed=embed_ephemeral("Você precisa de permissão para expulsar (kick) para aplicar advertências.", "erro"),
+            ephemeral=True,
+        )
+
+    # responde já; remover/adicionar cargos envolve chamadas à API do
+    # Discord que podem ultrapassar os 3s de janela de resposta
+    await interaction.response.defer(ephemeral=True)
 
     adv1 = interaction.guild.get_role(ID_CARGO_ADV1)
     adv2 = interaction.guild.get_role(ID_CARGO_ADV2)
     adv3 = interaction.guild.get_role(ID_CARGO_ADV3)
-    banido = interaction.guild.get_role(ID_CARGO_BANIDO)
+    afastado = interaction.guild.get_role(ID_CARGO_AFASTADO)
 
-    if banido in membro.roles:
-        return await interaction.response.send_message("⚠ Esse membro já está banido.", ephemeral=True)
+    if afastado in membro.roles:
+        return await interaction.followup.send(embed=embed_ephemeral("Esse membro já está afastado.", "aviso"), ephemeral=True)
 
     if adv3 in membro.roles:
         try:
             await membro.remove_roles(adv3)
-            await membro.add_roles(banido)
-            msg = "🚫 4ª advertência → BANIDO"
+            await membro.add_roles(afastado)
+            msg = "4ª advertência → AFASTADO"
+            nivel = 3
         except Exception:
-            return await interaction.response.send_message("❌ Erro ao atualizar cargos.", ephemeral=True)
+            return await interaction.followup.send(embed=embed_ephemeral("Erro ao atualizar cargos.", "erro"), ephemeral=True)
     elif adv2 in membro.roles:
         await membro.remove_roles(adv2)
         await membro.add_roles(adv3)
-        msg = "⚠ 3ª advertência aplicada!"
+        msg = "2ª advertência aplicada!"
+        nivel = 2
     elif adv1 in membro.roles:
         await membro.remove_roles(adv1)
         await membro.add_roles(adv2)
-        msg = "⚠ 2ª advertência aplicada!"
+        msg = "1ª advertência aplicada!"
+        nivel = 1
     else:
-        await membro.add_roles(adv1)
-        msg = "⚠ 1ª advertência aplicada!"
+        await membro.add_roles(adv1)    
+        msg = "Advertência Verbal aplicada!"
+        nivel = verbal = 0
 
-    await interaction.response.send_message(msg, ephemeral=True)
+    tipo_msg = "erro" if nivel == 3 else "aviso"
+    await interaction.followup.send(embed=embed_ephemeral(msg, tipo_msg), ephemeral=True)
 
-    # log
+    # persiste no banco
+    await db.a_aplicar_advertencia(membro.id, interaction.user.id, motivo, nivel)
+
     embed = discord.Embed(
-        title="⚠ Advertência aplicada",
-        description=f"**Membro:** {membro.mention}\n**Por:** {interaction.user.mention}\n**Motivo:** {motivo}",
-        color=discord.Color.orange(),
-        timestamp=discord.utils.utcnow()
+        title=f"<:paineladmin:1540780905902374982> **Advertência aplicada**",
+        description=
+        f"<:CRACHA3:1540809884424208394> **Membro:**\n" 
+        f"> {membro.mention}\n\n"
+
+        f"<:CRACHA2:1540808930572243004> **Por:**\n" 
+        f"> {interaction.user.mention}\n\n"
+
+        f"<:baixar:1540778990615273533> Advertências aplicadas:\n" 
+        f"> **{nivel}/2**\n\n"
+
+        f"<:222:1540799996251865108> **Motivo:**\n" 
+        f"> {motivo}",
+        color=discord.Color.yellow(),
     )
-    await enviar_log_embed(interaction.guild, embed)        
+
+    embed.set_thumbnail(
+        url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8b4418&is=6a89f298&hm=ccef0422a39e4382dc5e5b9858c859cb3a0dd81a22eac8f643b85ee6fa955c8f&"
+    )    
+
+    embed.set_footer(icon_url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8b4418&is=6a89f298&hm=ccef0422a39e4382dc5e5b9858c859cb3a0dd81a22eac8f643b85ee6fa955c8f&", text="Batalhão 9° BPM/M Virtual® Todos direitos reservados.")
+
+    await enviar_log_canal(interaction.guild, LOG_CHANNEL_ADV, embed, contexto="/adv")
+
 
 # ============================
 #            BAN
@@ -319,118 +481,150 @@ async def ban(interaction: discord.Interaction, membro: discord.Member, motivo: 
     if not await require_authorized(interaction):
         return
 
-    # checar permissão de ban
     if not interaction.user.guild_permissions.ban_members:
-        return await interaction.response.send_message("❌ Você precisa da permissão de banir.", ephemeral=True)
+        return await interaction.response.send_message(
+            embed=embed_ephemeral("Você precisa da permissão de banir.", "erro"), ephemeral=True
+        )
+
+    await interaction.response.defer(ephemeral=True)
 
     try:
         await membro.ban(reason=motivo)
-        await interaction.response.send_message(f"🔨 {membro.mention} banido!", ephemeral=True)
+        await interaction.followup.send(embed=embed_ephemeral(f"{membro.mention} Afastado!", "sucesso"), ephemeral=True)
     except discord.Forbidden:
-        return await interaction.response.send_message("❌ O bot não pode banir esse usuário.", ephemeral=True)
+        return await interaction.followup.send(
+            embed=embed_ephemeral("O bot não pode banir esse usuário.", "erro"), ephemeral=True
+        )
 
     embed = discord.Embed(
-        title="🚫 Membro Banido",
-        description=f"**Membro:** {membro.mention}\n**Por:** {interaction.user.mention}\n**Motivo:** {motivo}",
-        color=discord.Color.red(),
-        timestamp=discord.utils.utcnow()
+        title=f"<:paineladmin:1540780905902374982> **Membro Afastado**",
+        description=
+        f"<:CRACHA3:1540809884424208394> **Membro:**\n" 
+        f"> {membro.mention}\n\n"
+
+        f"<:CRACHA2:1540808930572243004> **Por:**\n" 
+        f"> {interaction.user.mention}\n\n"
+
+        f"<:222:1540799996251865108> **Motivo:**\n" 
+        f"> {motivo}",
+        color=discord.Color.yellow(),
     )
-    await enviar_log_embed(interaction.guild, embed)    
 
-# ================= CONFIG =================
+    embed.set_thumbnail(
+        url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8b4418&is=6a89f298&hm=ccef0422a39e4382dc5e5b9858c859cb3a0dd81a22eac8f643b85ee6fa955c8f&"
+    )    
+
+    embed.set_footer(icon_url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8b4418&is=6a89f298&hm=ccef0422a39e4382dc5e5b9858c859cb3a0dd81a22eac8f643b85ee6fa955c8f&", text="Batalhão 9° BPM/M Virtual® Todos direitos reservados.")
+
+    await enviar_log_canal(interaction.guild, LOG_CHANNEL_BAN, embed, contexto="/ban")
 
 
-CANALETA_SOLICITAR_SET_ID = 1492395719607320636
-CARGO_NOVATO_ID = 1492395701814952008
-CATEGORIA_TICKET_ID = 1496349086029316157
+# ================= CONFIG ROTA =================
 
-# Canal de logs exclusivo ROTA
-CANAL_LOGS_ROTA = 1495483263446286527
+CANALETA_SOLICITAR_SET_ID = 1343398652349255758
+CARGO_NOVATO_ID = 1345435302285545652
+CATEGORIA_TICKET_ID = 1540764062047142081
 
-# Cargo da companhia ROTA
-CARGO_ROTA_ID = 1492395666276745246
+CANAL_LOGS_ROTA = 1473844393893953679
 
-CARGO_1CIA_ID = 1495526378601189456
-CARGO_2CIA_ID = 1495526435656437861
+CARGO_ROTA_ID = 1343645401051431017
+CARGO_1CIA_ID = 1540764436078272562
+CARGO_2CIA_ID = 1540764610079096842
 
 # ================= PATENTES ROTA =================
 
 PATENTES_ROTA = {
+    "Soldado de 2° Classe PM": {
+        "roles": [1343408280919050240, 1343645401051431017],
+        "emoji": "<:SD:1480800971604103310>",
+    },
     "Soldado de 1º Classe PM": {
-        "roles": [1492395659477647481, 1492395657762439279],
-        "emoji": "<:SD:1495511851969282249>"
+        "roles": [1343408322774175785, 1343645401051431017, 1345448070904545383, 1474036218193776771],
+        "emoji": "<:SD:1480800971604103310>",
     },
     "Cabo PM": {
-        "roles": [1492395658617815220, 1492395657762439279],
-        "emoji": "<:CABO:1495511811699638525>"
-
-    },
-    "Aluno-Sargento PM": {
-        "roles": [1494423857564749874, 1492395651718184980],
-        "emoji": "<:AlunoSargento:1495511772256538654>"
+        "roles": [1343408303417331772, 1343645401051431017, 1345448070904545383, 1474036218193776771],
+        "emoji": "<:CABO:1480800948434767965>",
     },
     "3º Sargento PM": {
-        "roles": [1492395656529186847, 1492395651718184980],
-        "emoji": "<:3SGT:1495510521690980444>"
+        "roles": [1343404402219814932, 1343645401051431017, 1345448070904545383, 1474036218193776771],
+        "emoji": "<:3SGT:1480800757027573833>",
     },
     "2º Sargento PM": {
-        "roles": [1492395655732400160, 1492395651718184980],
-        "emoji": "<:2SGT:1495510481161683004>"
+        "roles": [1343408106457272462, 1343645401051431017, 1345448070904545383, 1474036218193776771],
+        "emoji": "<:2SGT:1480800372267421850>",
     },
     "1º Sargento PM": {
-        "roles": [1492395654817906811, 1492395651718184980],
-        "emoji": "<:1SGT:1495510428032176210>"
+        "roles": [1343408155161264158, 1343645401051431017, 1345448070904545383, 1474036218193776771],
+        "emoji": "<:1SGT:1480800346375983226>",
     },
     "Sub-Tenente PM": {
-        "roles": [1492395652767027331, 1492395651718184980],
-        "emoji": "<:SUBTEN:1495510380540334080>"
-    },
-    "Aluno-Oficial PM": {
-        "roles": [1494424186964279327, 1492395642843299952],
-        "emoji": "<:AlunoOfI:1495510303046111333>"
+        "roles": [1343727303795933184, 1343645401051431017, 1345448070904545383, 1474036218193776771],
+        "emoji": "<:SUBTEN:1480800319553273898>",
     },
     "Aspirante a Oficial PM": {
-        "roles": [1492395650657030236, 1492395642843299952],
-        "emoji": "<:ASPOFC:1495510195512672438>"
+        "roles": [1343648749381091570, 1343645401051431017, 1475979105773289665, 1479956670502142043],
+        "emoji": "<:ASPOFC:1480800296748847205>",
     },
-
     "2º Tenente PM": {
-        "roles": [1492395649100939386, 1492395642843299952],
-        "emoji": "<:2TENENTE:1495509369817923855>"
+        "roles": [1343419697294479471, 1343645401051431017, 1472845767411761172, 1474036182215037028],
+        "emoji": "<:2TENENTE:1480800246337638511>",
     },
-
     "1º Tenente PM": {
-        "roles": [1492395648014876733, 1492395642843299952],
-        "emoji": "<:1TENENTE:1495509263487996154>"  
+        "roles": [1343408376302014495, 1343645401051431017, 1472845767411761172, 1474036182215037028],
+        "emoji": "<:1TENENTE:1480800221930983538>",
     },
-
     "Capitão PM": {
-        "roles": [1492395647427416124, 1492395642843299952],
-        "emoji": "<:CAPITO:1495509192465973258>"
+        "roles": [1343404318946103346, 1343645401051431017, 1345445863794802791, 1475272157855481938, 1474036182215037028],
+        "emoji": "<:CAPITO:1480800193841463367>",
     },
-
-
+    "Major PM": {
+        "roles": [1343401976523784253, 1343645401051431017, 1343758208925175859, 1474036182215037028, 1475272157855481938, 1474200327564693739],
+        "emoji": "<:MAJOR:1480800161646116956>",
+    },
+    "Tenente-Coronel PM": {
+        "roles": [1343401212417937468, 1343645401051431017, 1343758208925175859, 1474036182215037028, 1475272157855481938, 1345445339456475286],
+        "emoji": "<:TENCEL:1480800122341298186>",
+    },
+    "Coronel PM": {
+        "roles": [1540766907656048755, 1343645401051431017, 1343758208925175859, 1474036182215037028, 1475272157855481938, 1343758574387593298],
+        "emoji": "<:CEL:1540765334531735703>",
+    },
 }
-
-solicitacoes_abertas = {}
 
 # ================= TICKET =================
 
 class TicketView(View):
     def __init__(self):
-        super().__init__(timeout=None)  # 🔥 ESSENCIAL
+        super().__init__(timeout=None)
 
     @discord.ui.button(
-        label="Solicitar Funcional", 
+        label="Solicitar Funcional",
         style=discord.ButtonStyle.secondary,
-        emoji="<:AMARELO:1495480160319836412>",
-        custom_id="ticket_abrir"
+        emoji="<:CRACHA:1540808611436167208>",
+        custom_id="ticket_abrir",
     )
     async def abrir_ticket(self, interaction: discord.Interaction, button: Button):
-
-        if interaction.user.id in solicitacoes_abertas:
-            await interaction.response.send_message("⚠️ Você já possui um ticket aberto.", ephemeral=True)
+        # checagem via banco: sobrevive a restarts do bot.
+        # ticket_aberto_existe só considera status 'aberto' ou
+        # 'aguardando_aprovacao' como bloqueio — assim que uma solicitação
+        # é aprovada OU recusada, este botão libera automaticamente.
+        if await db.a_ticket_aberto_existe(interaction.user.id):
+            await interaction.response.send_message(
+                embed=embed_ephemeral(
+                    "Você já possui uma solicitação de funcional em aberto. "
+                    "Aguarde a análise — assim que ela for concluída (aprovada "
+                    "ou recusada), você poderá enviar novamente.",
+                    "aviso",
+                    titulo="Solicitação em Andamento",
+                ),
+                ephemeral=True,
+            )
             return
+
+        # responde já (defer) — criar canal + gravar no banco pode levar
+        # mais de 3s em picos de uso, e aí o token da interação expira
+        await interaction.response.defer(ephemeral=True)
 
         guild = interaction.guild
         user = interaction.user
@@ -443,66 +637,77 @@ class TicketView(View):
         }
 
         canal = await guild.create_text_channel(
-            name=f"ticket-{user.name}",
+            name=f"ticket-{user.id}",
             category=category,
-            overwrites=overwrites
+            overwrites=overwrites,
         )
 
-        solicitacoes_abertas[user.id] = {"canal_id": canal.id}
+        # ticket_data traz o id interno E o código único (ex: FT-8K2P4X)
+        # usado como identificador humano/estável da solicitação.
+        ticket_data = await db.a_criar_ticket(user.id, canal.id)
+        ticket_id = ticket_data["id"]
+        codigo = ticket_data["codigo"]
 
-        # select de patente
         view = View()
-        view.add_item(SelectPatente(user.id))
+        view.add_item(SelectPatente(ticket_id))
 
-        # botão de ir ao ticket
         view_botao = View()
         view_botao.add_item(
             Button(
                 label="Acessar Ticket",
                 url=canal.jump_url,
                 style=discord.ButtonStyle.link,
-                emoji="<:AMARELO:1495480160319836412>"
+                emoji="<:CRACHA:1540808611436167208>",
             )
         )
 
-        # embed bonito
         embed = discord.Embed(
-            title="Ticket Criado com Sucesso 🎫",
+            title="Ticket Criado com Sucesso",
             description=(
-                f"Seu ticket foi criado!\n"   
-                f"**Clique no botão abaixo** para ir até seu _ticket_."
+                f"Seu ticket foi criado!\n"
+                f"**Clique no botão abaixo** para ir até seu _ticket_.\n\n"
+                f"**Código da solicitação:** ||`{codigo}`||\n"  
             ),
-            color=discord.Color.yellow()
+            color=discord.Color.yellow(),
         )
+        embed.set_footer(icon_url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8b4418&is=6a89f298&hm=ccef0422a39e4382dc5e5b9858c859cb3a0dd81a22eac8f643b85ee6fa955c8f&", text="Batalhão FT Virtual® Todos direitos reservados.")
 
-        embed.set_footer(text="• Batalhão FT Virtual® Todos direitos reservados.")
 
-        # mensagem dentro do ticket
         await canal.send(
-            f"{user.mention}, Abaixo você poderá selecionar sua patente:",
-            view=view
+            f"{user.mention}, Abaixo você poderá selecionar sua patente:  •  Código: ||`{codigo}`||",
+            view=view,
         )
 
-        # resposta privada
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=embed,
             view=view_botao,
-            ephemeral=True
+            ephemeral=True,
         )
+
 
 # ================= SELECT PATENTE =================
 
 class SelectPatente(Select):
-    def __init__(self, user_id):
-        self.user_id = user_id
+    def __init__(self, ticket_id: int):
+        self.ticket_id = ticket_id
         options = []
-
         for nome, dados in PATENTES_ROTA.items():
+            emoji_str = dados.get("emoji")
+            emoji = None
+            if emoji_str:
+                try:
+                    emoji = discord.PartialEmoji.from_str(emoji_str)
+                except Exception:
+                    print(f"⚠️ Emoji inválido para a patente '{nome}': {emoji_str!r} — usando sem emoji.")
+                    emoji = None
+            else:
+                print(f"⚠️ Patente '{nome}' está sem 'emoji' em PATENTES_ROTA — usando sem emoji.")
+
             options.append(
                 discord.SelectOption(
                     label=nome,
                     value=nome,
-                    emoji=discord.PartialEmoji.from_str(dados["emoji"])
+                    emoji=emoji,
                 )
             )
         super().__init__(placeholder="Escolha sua patente", options=options)
@@ -510,22 +715,23 @@ class SelectPatente(Select):
     async def callback(self, interaction: discord.Interaction):
         patente_nome = self.values[0]
         dados = PATENTES_ROTA[patente_nome]
-        patente_ids = dados["roles"]
+        patente_ids = dados.get("roles", [])
 
         view = View()
-        view.add_item(SelectCIA(self.user_id, patente_nome, patente_ids))
+        view.add_item(SelectCIA(self.ticket_id, patente_nome, patente_ids))
 
         await interaction.response.send_message(
-            "Abra o próximo menu para escolher sua companhia:",
+            embed=embed_ephemeral("Abra o próximo menu para escolher sua companhia:", "info"),
             view=view,
-            ephemeral=True
-        )       
+            ephemeral=True,
+        )
+
 
 # ================= CIA =================
 
 class SelectCIA(Select):
-    def __init__(self, user_id, patente_nome, patente_ids):
-        self.user_id = user_id
+    def __init__(self, ticket_id: int, patente_nome: str, patente_ids: list):
+        self.ticket_id = ticket_id
         self.patente_nome = patente_nome
         self.patente_ids = patente_ids
 
@@ -533,24 +739,13 @@ class SelectCIA(Select):
             discord.SelectOption(label="1° CIA", value="1CIA"),
             discord.SelectOption(label="2° CIA", value="2CIA"),
         ]
-
-        super().__init__(
-            placeholder="Escolha sua CIA",
-            options=options
-        )
+        super().__init__(placeholder="Escolha sua CIA", options=options)
 
     async def callback(self, interaction: discord.Interaction):
         cia = self.values[0]
-
-        # abre o modal depois da CIA
         await interaction.response.send_modal(
-            DadosPessoaisModal(
-                self.user_id,
-                self.patente_nome,
-                self.patente_ids,
-                cia
-            )
-        )     
+            DadosPessoaisModal(self.ticket_id, self.patente_nome, self.patente_ids, cia)
+        )
 
 
 # ================= MODAL =================
@@ -559,159 +754,311 @@ class DadosPessoaisModal(Modal, title="Registro do Policial"):
     nome = TextInput(label="Nome Completo", required=True, max_length=80)
     passaporte = TextInput(label="Passaporte", required=True, max_length=20)
 
-    def __init__(self, user_id, patente_nome, patente_id, cia):
+    def __init__(self, ticket_id: int, patente_nome: str, patente_ids: list, cia: str):
         super().__init__()
-        self.user_id = user_id
+        self.ticket_id = ticket_id
         self.patente_nome = patente_nome
-        self.patente_id = patente_id
+        self.patente_ids = patente_ids
         self.cia = cia
 
     async def on_submit(self, interaction: discord.Interaction):
-
         await interaction.response.defer(ephemeral=True)
 
         nome = self.nome.value.strip()
         passaporte = self.passaporte.value.strip()
-
-        # DEFINE O ID DO CARGO DA CIA ESCOLHIDA
         cargo_cia_id = CARGO_1CIA_ID if self.cia == "1CIA" else CARGO_2CIA_ID
 
-        solicitacoes_abertas[self.user_id].update({
-            "patente_id": self.patente_id,
-            "nome": nome,
-            "passaporte": passaporte,
-            "cia": self.cia,
-            "cargo_cia_id": cargo_cia_id
-        })
-
-        embed = Embed(
-            title="Solicitação de Funcional",
-            description=(
-                f"**Solicitante:** {interaction.user.mention}\n"
-                f"**Nome:** {nome}\n"
-                f"**R.E:** {passaporte}\n"
-                f"**Companhia:** {self.cia}\n"
-                f"**Patente:** {self.patente_nome}"
-            ),
-            color=discord.Color.yellow()
+        await db.a_salvar_dados_pessoais(
+            self.ticket_id,
+            nome=nome,
+            passaporte=passaporte,
+            cia=self.cia,
+            cargo_cia_id=cargo_cia_id,
+            patente_nome=self.patente_nome,
+            patente_roles=self.patente_ids,
         )
 
-        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1444735189765849320/1495479496084557834/FT.png?ex=69e66550&is=69e513d0&hm=5a9f94eb8e712eb3d8d1b13346113bf5c0b0d1c33ede66a3b0dd215f53b32f3b&")
-        embed.set_image(url="https://regiaonoroeste.com/wp-content/uploads/2025/06/forca-tatica-droga.jpg   ")
-        embed.set_footer(text="Batalhão FT Virtual® Todos direitos reservados.")
+        # busca o ticket completo (já tem o código gerado na criação)
+        ticket = await asyncio.to_thread(db.buscar_ticket_por_canal, interaction.channel.id)
+        codigo = ticket["codigo"] if ticket else "—"
+
+        embed = Embed(
+            title=f"<:CRACHA:1540808611436167208> **Solicitação de Funcional ||`{codigo}`||**",
+            description=(
+                f"<:pessoas:1540780605237760050> **Nome:**"
+                f"`{nome}`\n\n"  
+
+                f"<:111:1540791811310747759> **Identificação:**"
+                f"`{passaporte}`\n\n"
+
+                f"<:222:1540799996251865108> **Companhia:**"
+                f"`{self.cia}`\n\n"             
+
+                f"<:paineladmin:1540780905902374982> **Patente:**"
+                f"`{self.patente_nome}`\n\n"   
+
+                 f"<:CRACHA:1540808611436167208> **Solicitante:**" 
+                f"{interaction.user.mention}\n\n"             
+            ),
+            color=discord.Color.yellow(),
+        )
+        embed.set_thumbnail(
+            url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8b4418&is=6a89f298&hm=ccef0422a39e4382dc5e5b9858c859cb3a0dd81a22eac8f643b85ee6fa955c8f&"
+        )
+        embed.set_image(
+            url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798066678960138/content.png?ex=6a8b4385&is=6a89f205&hm=42f4f0c2b8620d5d10885529900718bafd16db2709f130593b87005d255ff0a2&"
+        )
+        embed.set_footer(icon_url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8b4418&is=6a89f298&hm=ccef0422a39e4382dc5e5b9858c859cb3a0dd81a22eac8f643b85ee6fa955c8f&", text=f"Batalhão 9° BPM/M Virtual® Todos direitos reservados.")
 
         try:
             canal_logs = await interaction.client.fetch_channel(CANAL_LOGS_ROTA)
-        except:
-            await interaction.followup.send("❌ Canal de logs não encontrado.", ephemeral=True)
+        except Exception:
+            await interaction.followup.send(embed=embed_ephemeral("Canal de logs não encontrado.", "erro"), ephemeral=True)
             return
-        await canal_logs.send(embed=embed, view=ConfirmarOuFecharView(self.user_id))
 
-        await interaction.followup.send("✅ Solicitação enviada para avaliação.", ephemeral=True)
+        msg = await canal_logs.send(embed=embed, view=ConfirmarOuFecharView())
+        await db.a_registrar_mensagem_log(self.ticket_id, canal_logs.id, msg.id)
+
+        await interaction.followup.send(
+            embed=embed_ephemeral(f"Solicitação enviada para avaliação. Código: `{codigo}`", "sucesso"),
+            ephemeral=True,
+        )
 
 
-# ================= CONFIRMAR =================
+# ================= CONFIRMAR (stateless — busca dados no banco pela mensagem) =================
+
+def _extrair_codigo_do_footer(embed: discord.Embed) -> str | None:
+    """Tenta extrair o código (ex: FT-8K2P4X) do rodapé do embed de log, como
+    fallback caso a busca pelo ID da mensagem falhe por algum motivo."""
+    if not embed or not embed.footer or not embed.footer.text:
+        return None
+    texto = embed.footer.text
+    if "Código:" not in texto:
+        return None
+    return texto.split("Código:")[-1].strip()
+
 
 class ConfirmarOuFecharView(View):
-    def __init__(self, user_id):
+    """
+    Importante: esta view NÃO guarda user_id/ticket_id na instância.
+    Assim ela pode ser re-registrada como view persistente uma única vez
+    (com custom_id fixo) e continuar funcionando corretamente mesmo depois
+    de o bot reiniciar — o ticket é sempre localizado pelo id da mensagem
+    onde o clique aconteceu (e, como reforço, pelo código único gravado
+    no rodapé do embed, caso a busca por mensagem não encontre nada).
+    """
+
+    def __init__(self):
         super().__init__(timeout=None)
-        self.user_id = user_id
+
+    async def _localizar_ticket(self, interaction: discord.Interaction) -> dict | None:
+        ticket = await db.a_buscar_ticket_por_log_message(interaction.message.id)
+        if ticket:
+            return ticket
+        # fallback pelo código gravado no rodapé do embed
+        codigo = _extrair_codigo_do_footer(interaction.message.embeds[0]) if interaction.message.embeds else None
+        if codigo:
+            ticket = await db.a_buscar_ticket_por_codigo(codigo)
+        return ticket
 
     @discord.ui.button(
         label="Aceitar Funcional",
         style=discord.ButtonStyle.gray,
         emoji="<:AMARELO:1495480160319836412>",
-        custom_id="confirmar_set"
+        custom_id="confirmar_set",
     )
     async def confirmar(self, interaction: discord.Interaction, button: Button):
+        if not has_authorized_role(interaction.user):
+            return await interaction.response.send_message(embed=embed_ephemeral("Sem permissão.", "erro"), ephemeral=True)
 
-        dados = solicitacoes_abertas.pop(self.user_id, None)
+        # responde a interação AGORA (token expira em ~3s) e só depois faz
+        # o trabalho pesado (banco, editar apelido, atribuir cargos etc.)
+        await interaction.response.defer(ephemeral=True)
 
-        if not dados:
-            await interaction.response.send_message(
-                "❌ Solicitação não encontrada.",
-                ephemeral=True
+        ticket = await self._localizar_ticket(interaction)
+        if not ticket or ticket["status"] != "aguardando_aprovacao":
+            return await interaction.followup.send(
+                embed=embed_ephemeral("Solicitação não encontrada ou já processada.", "erro"), ephemeral=True
             )
-            return
 
-        membro = interaction.guild.get_member(self.user_id)
-
+        membro = interaction.guild.get_member(ticket["user_id"])
         if not membro:
-            await interaction.response.send_message(
-                "❌ Membro não encontrado.",
-                ephemeral=True
+            return await interaction.followup.send(
+                embed=embed_ephemeral("Membro não encontrado no servidor.", "erro"), ephemeral=True
             )
-            return
 
-        novo_apelido = f"#{dados['passaporte']} | {dados['nome']}"
-
+        novo_apelido = f"#{ticket['passaporte']} | {ticket['nome']}"
         try:
             await membro.edit(nick=novo_apelido)
-        except:
+        except Exception:
             pass
 
         cargos = []
-
-        # cargos da patente
-        for role_id in dados["patente_id"]:
+        for role_id in json.loads(ticket["patente_roles"] or "[]"):
             cargo = interaction.guild.get_role(role_id)
             if cargo:
                 cargos.append(cargo)
 
-        # cargo ROTA
         cargo_rota = interaction.guild.get_role(CARGO_ROTA_ID)
         if cargo_rota:
             cargos.append(cargo_rota)
 
-        # cargo CIA escolhida
-        cargo_cia = interaction.guild.get_role(dados["cargo_cia_id"])
+        cargo_cia = interaction.guild.get_role(ticket["cargo_cia_id"])
         if cargo_cia:
             cargos.append(cargo_cia)
 
-        await membro.add_roles(*cargos)
+        if cargos:
+            try:
+                await membro.add_roles(*cargos)
+            except Exception:
+                await interaction.followup.send(
+                    embed=embed_ephemeral("Erro ao atribuir cargos (verifique permissões do bot).", "erro"),
+                    ephemeral=True,
+                )
+                return
+
+        # status muda para 'aprovado' -> ticket_aberto_existe(user_id) volta a
+        # ser False automaticamente, liberando o botão "Solicitar Funcional"
+        # (nesse caso o usuário já foi aprovado, então não precisa reabrir).
+        await db.a_finalizar_ticket(ticket["id"], "aprovado", interaction.user.id)
 
         embed = interaction.message.embeds[0]
         embed.color = discord.Color.green()
-        embed.description += f"\n\n✅ **Aprovado por:** {interaction.user.mention}"
-
+        embed.description += f"\n\n<:CRACHA2:1540808930572243004> **Aprovado por:** {interaction.user.mention}"
         await interaction.message.edit(embed=embed, view=None)
 
-        await interaction.response.send_message(
-            "✅ Funcional aprovada e cargos entregues.",
-            ephemeral=True
-        )
+        await interaction.followup.send(embed=embed_status_credencial(aprovado=True), ephemeral=True)
 
-        canal = interaction.guild.get_channel(dados["canal_id"])
+        embed_log = discord.Embed(
+            title=f"<:CRACHA2:1540808930572243004> Log - Funcional Aprovada ||`{ticket['codigo']}`||",
+            description=(
+                f"<:pessoas:1540780605237760050> **Nome:**"
+                f"`{ticket['nome']}`\n\n"
+                f"<:111:1540791811310747759> **Identificação:**"
+                f"`{ticket['passaporte']}`\n\n"
+                f"<:222:1540799996251865108> **Companhia:**"
+                f"`{ticket['cia']}`\n\n"             
+                f"<:paineladmin:1540780905902374982> **Patente:**"
+                f"`{ticket['patente_nome']}`\n\n"   
+                f"<:CRACHA:1540808611436167208> **Solicitante:**"
+                f"{interaction.user.mention}\n\n"                
+                f"<:CRACHA:1540808611436167208> **Aprovado por:** {interaction.user.mention}"
+            ),  
+            
+            color=discord.Color.green(),
+            timestamp=discord.utils.utcnow(),
+        )
+        await enviar_log_canal(interaction.guild, LOG_CHANNEL_FUNCIONAL_APROVADO, embed_log, contexto="funcional aprovado")
+
+        canal = interaction.guild.get_channel(ticket["canal_id"])
         if canal:
             await asyncio.sleep(5)
-            await canal.delete()
+            try:
+                await canal.delete()
+            except Exception:
+                pass
 
     @discord.ui.button(
         label="Recusar Funcional",
         style=discord.ButtonStyle.gray,
         emoji="<:x1:1495508233647952062>",
-        custom_id="recusar_set"
+        custom_id="recusar_set",
     )
     async def cancelar(self, interaction: discord.Interaction, button: Button):
+        if not has_authorized_role(interaction.user):
+            return await interaction.response.send_message(embed=embed_ephemeral("Sem permissão.", "erro"), ephemeral=True)
 
-        dados = solicitacoes_abertas.pop(self.user_id, None)
+        await interaction.response.defer(ephemeral=True)
+
+        ticket = await self._localizar_ticket(interaction)
+        if not ticket or ticket["status"] != "aguardando_aprovacao":
+            return await interaction.followup.send(
+                embed=embed_ephemeral("Solicitação não encontrada ou já processada.", "erro"), ephemeral=True
+            )
+
+        # status muda para 'recusado' -> ticket_aberto_existe(user_id) volta a
+        # ser False automaticamente, liberando o botão "Solicitar Funcional"
+        # para o usuário poder enviar de novo.
+        await db.a_finalizar_ticket(ticket["id"], "recusado", interaction.user.id)
 
         embed = interaction.message.embeds[0]
         embed.color = discord.Color.red()
-        embed.description += f"\n\n❌ **Cancelado por:** {interaction.user.mention}"
-
+        embed.description += f"\n\n<:CRACHA3:1540809884424208394> **Recusado por:** {interaction.user.mention}"
         await interaction.message.edit(embed=embed, view=None)
 
-        await interaction.response.send_message(
-            "🗑️ Solicitação cancelada.",
-            ephemeral=True
+        await interaction.followup.send(embed=embed_status_credencial(aprovado=False), ephemeral=True)
+
+        embed_log = discord.Embed(
+            title=f"<:CRACHA3:1540809884424208394> Log - Funcional Recusada ||`{ticket['codigo']}`||",
+            description=(
+                f"<:pessoas:1540780605237760050> **Nome:**"
+                f"`{ticket['nome']}`\n\n"
+                f"<:111:1540791811310747759> **Identificação:**"
+                f"`{ticket['passaporte']}`\n\n"
+                f"<:222:1540799996251865108> **Companhia:**"
+                f"`{ticket['cia']}`\n\n"             
+                f"<:paineladmin:1540780905902374982> **Patente:**"
+                f"`{ticket['patente_nome']}`\n\n"   
+                f"<:CRACHA:1540808611436167208> **Solicitante:**"
+                f"{interaction.user.mention}\n\n"                
+                f"<:CRACHA3:1540809884424208394> **Recusado por:** {interaction.user.mention}"
+            ),
+
+            color=discord.Color.red(),
+            timestamp=discord.utils.utcnow(),
+        )
+        await enviar_log_canal(interaction.guild, LOG_CHANNEL_FUNCIONAL_RECUSADO, embed_log, contexto="funcional recusado")
+
+        canal = interaction.guild.get_channel(ticket["canal_id"])
+        if canal:
+            await asyncio.sleep(5)
+            try:
+                await canal.delete()
+            except Exception:
+                pass
+
+
+# ================= BUSCAR FUNCIONAL POR CÓDIGO =================
+
+@bot.tree.command(
+    name="buscar-funcional",
+    description="Consulta uma solicitação de funcional pelo código (ex: FT-8K2P4X).",
+    guild=discord.Object(id=GUILD_ID),
+)
+async def buscar_funcional(interaction: discord.Interaction, codigo: str):
+    if not await require_authorized(interaction):
+        return
+
+    await interaction.response.defer(ephemeral=True)
+
+    ticket = await db.a_buscar_ticket_por_codigo(codigo)
+    if not ticket:
+        return await interaction.followup.send(
+            embed=embed_ephemeral(f"Nenhuma solicitação encontrada para o código ||`{codigo}`||.", "erro"),
+            ephemeral=True,
         )
 
-        if dados:
-            canal = interaction.guild.get_channel(dados["canal_id"])
-            if canal:
-                await asyncio.sleep(5)
-                await canal.delete()
+    status_legivel = {
+        "aberto": "🟡 Aberto (aguardando dados)",
+        "aguardando_aprovacao": "🟠 Aguardando aprovação",
+        "aprovado": "🟢 Aprovado",
+        "recusado": "🔴 Recusado",
+    }.get(ticket["status"], ticket["status"])
+
+    embed = discord.Embed(
+        title=f"<:CRACHA:1540808611436167208> Solicitação `{ticket['codigo']}`",
+        description=(
+            f"<:pessoas:1540780605237760050> **Nome:** {ticket.get('nome') or '—'}\n\n"
+            f"<:111:1540791811310747759> **Identificação:** {ticket.get('passaporte') or '—'}\n\n"
+            f"<:222:1540799996251865108> **Companhia:** {ticket.get('cia') or '—'}\n\n"
+            f"<:paineladmin:1540780905902374982> **Patente:** {ticket.get('patente_nome') or '—'}\n\n"
+            f"<:CRACHA:1540808611436167208> **Solicitante:** <@{ticket['user_id']}>\n\n"         
+            f"<:assumirticket:1540778869332906025> **Status:** {status_legivel}"
+        ),
+        color=discord.Color.yellow(),
+    )
+    await interaction.followup.send(embed=embed, ephemeral=True)
+
 
 # ================= READY =================
 
@@ -719,8 +1066,17 @@ class ConfirmarOuFecharView(View):
 async def on_ready():
     print(f"🔥 Bot conectado como {bot.user}")
 
+    # views persistentes: seguro registrar de novo a cada reconexão (idempotente)
     bot.add_view(TicketView())
-    bot.add_view(ConfirmarOuFecharView(user_id=0))  # user_id dummy    
+    bot.add_view(ConfirmarOuFecharView())
+    bot.add_view(PainelAdminView())
+
+    # o resto (purge, envio de painel, sync de slash commands) só deve
+    # rodar UMA vez por processo — repetir isso a cada reconexão soma
+    # duplicatas e pode bater em rate limit da API do Discord.
+    if bot._ready_sent:
+        return
+    bot._ready_sent = True
 
     print(f"Bot: {bot.user} | ID: {bot.user.id}")
     print(f"GUILD CONFIG: {GUILD_ID}")
@@ -728,56 +1084,51 @@ async def on_ready():
     guild = discord.utils.get(bot.guilds, id=GUILD_ID)
 
     if not guild:
-        print(f"❌ Guild {GUILD_ID} NÃO encontrada.")
+        print(f"✅ Guild {GUILD_ID} NÃO encontrada.")
         return
 
-    print(f"✅ Guild encontrada: {guild.name}")
+    print(f"<:YES:1540777802935181444> Guild encontrada: {guild.name}")
 
     # ================= PAINEL SET =================
-
     try:
         canal = guild.get_channel(CANALETA_SOLICITAR_SET_ID)
 
         if canal:
-            # Apaga mensagens antigas do bot
             async for msg in canal.history(limit=10):
                 if msg.author == bot.user:
                     await msg.delete()
 
-        # 1️⃣ Criar
-        embed = discord.Embed(
-            title=" Sistema de Funcional",
-            description=("Clique no botão abaixo para iniciar sua solicitação.\n\n"
-            "Clique no botão abaixo para alterar **Solicitar sua Funcional**.\n\n"
-            "Regras:\n"
-            "• Apenas nomes **REGISTRAVEIS**\n"
-            "• Após a solicitação **AGUARDE**\n"            
-            "• Apenas maiores de 18 anos\n"
-            "• Todas as alterações são **registradas**\n\n"
-            "• Caso tenha duvidas <#1494767109316546663>\n\n"                       
-                         ),
-            color=discord.Color.yellow()
-        )
+            embed = discord.Embed(
+                title=" Sistema de Funcional",
+                description=(
+                    "Clique no botão abaixo para iniciar sua solicitação.\n\n"
+                    "Clique no botão abaixo para alterar **Solicitar sua Funcional**.\n\n"
+                    "Regras:\n"
+                    "• Apenas nomes **REGISTRAVEIS**\n"
+                    "• Após a solicitação **AGUARDE**\n"
+                    "• Apenas maiores de 18 anos\n"
+                    "• Todas as alterações são **registradas**\n\n"
+                    "• Caso tenha duvidas <#1473875232430227497>\n\n"
+                ),
+                color=discord.Color.yellow(),
+            )
+            embed.set_image(url="https://cdn.discordapp.com/attachments/1444735189765849320/1540797986068627598/9_bpm_SOLICITAR_FUNCIONAL_.png?ex=6a8b4372&is=6a89f1f2&hm=3817fcf103b86728f40bdc0b34c8836cdd3512202c519fa7714ef18122861fac&")
+            embed.set_thumbnail(
+                url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8b4418&is=6a89f298&hm=ccef0422a39e4382dc5e5b9858c859cb3a0dd81a22eac8f643b85ee6fa955c8f&"
+            )
+            embed.set_footer(icon_url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8b4418&is=6a89f298&hm=ccef0422a39e4382dc5e5b9858c859cb3a0dd81a22eac8f643b85ee6fa955c8f&", text="Batalhão 9° BPM/M Virtual® Todos direitos reservados.")
 
-        # 2️⃣ Configurar
-        embed.set_image(url="https://www.cidadaonet.com.br/storage/conteudo/large/398092680684acacc4a357.jpg")
-        
-
-        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1444735189765849320/1495479496084557834/FT.png?ex=69e66550&is=69e513d0&hm=5a9f94eb8e712eb3d8d1b13346113bf5c0b0d1c33ede66a3b0dd215f53b32f3b&")
-        embed.set_footer(text="Batalhão FT Virtual® Todos direitos reservados.")
-        
-
-        # 3️⃣ Enviar
-        await canal.send(embed=embed, view=TicketView())
-
-
-
-    except Exception as e:  
+            await canal.send(embed=embed, view=TicketView())
+    except Exception as e:
         print(f"Erro ao enviar painel SET: {e}")
-    
+
+    # ================= PAINEL ADMINISTRATIVO =================
+    try:
+        await enviar_painel(guild)
+    except Exception as e:
+        print(f"Erro ao enviar painel administrativo: {e}")
 
     # ================= SYNC SLASH =================
-
     try:
         synced = await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
         print(f"🔧 Slash Commands sincronizados: {[cmd.name for cmd in synced]}")
@@ -785,13 +1136,13 @@ async def on_ready():
         print(f"Erro ao sincronizar comandos: {e}")
 
     # ================= LOG DE START =================
-
     await enviar_log(guild, "🚀 Bot iniciado", "Sistema de SET e Slash Commands ativos.")
 
 
 # ================= RUN =================
 
 if not TOKEN:
-    print("ERRO: TOKEN não definido. Coloque TOKEN no .env ou variáveis de ambiente.")
+    print("ERRO: TOKEN_ROTA não definido. Coloque TOKEN_ROTA no .env ou variáveis de ambiente.")
 else:
+    db.init_db()
     bot.run(TOKEN)
