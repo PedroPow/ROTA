@@ -670,7 +670,7 @@ class TicketView(View):
             ),
             color=discord.Color.yellow(),
         )
-        embed.set_footer(icon_url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8b4418&is=6a89f298&hm=ccef0422a39e4382dc5e5b9858c859cb3a0dd81a22eac8f643b85ee6fa955c8f&", text="Batalhão FT Virtual® Todos direitos reservados.")
+        embed.set_footer(icon_url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8b4418&is=6a89f298&hm=ccef0422a39e4382dc5e5b9858c859cb3a0dd81a22eac8f643b85ee6fa955c8f&", text="Batalhão 9°BPM Virtual® Todos direitos reservados.")
 
 
         await canal.send(
