@@ -1104,11 +1104,11 @@ async def on_ready():
                     "Clique no botão abaixo para iniciar sua solicitação.\n\n"
                     "Clique no botão abaixo para alterar **Solicitar sua Funcional**.\n\n"
                     "Regras:\n"
-                    "• Apenas nomes **REGISTRAVEIS**\n"
-                    "• Após a solicitação **AGUARDE**\n"
-                    "• Apenas maiores de 18 anos\n"
-                    "• Todas as alterações são **registradas**\n\n"
-                    "• Caso tenha duvidas <#1473875232430227497>\n\n"
+                    f"<:ponto:1540777974427553862> Apenas nomes **REGISTRAVEIS**\n"
+                    f"<:ponto:1540777974427553862> Após a solicitação **AGUARDE**\n"
+                    f"<:ponto:1540777974427553862> Apenas maiores de 18 anos\n"
+                    f"<:ponto:1540777974427553862> Todas as alterações são **registradas**\n\n"
+                    f"<:ponto:1540777974427553862> Caso tenha duvidas <#1473875232430227497>\n\n"
                 ),
                 color=discord.Color.yellow(),
             )
