@@ -941,7 +941,7 @@ class ConfirmarOuFecharView(View):
                 f"<:paineladmin:1540780905902374982> **Patente:**"
                 f"`{ticket['patente_nome']}`\n\n"   
                 f"<:CRACHA:1540808611436167208> **Solicitante:**"
-                f"{interaction.user.mention}\n\n"                
+                f"<@{ticket['user_id']}>\n\n"               
                 f"<:CRACHA:1540808611436167208> **Aprovado por:** {interaction.user.mention}"
             ),  
             
@@ -1000,7 +1000,7 @@ class ConfirmarOuFecharView(View):
                 f"<:paineladmin:1540780905902374982> **Patente:**"
                 f"`{ticket['patente_nome']}`\n\n"   
                 f"<:CRACHA:1540808611436167208> **Solicitante:**"
-                f"{interaction.user.mention}\n\n"                
+                f"<@{ticket['user_id']}>\n\n"                
                 f"<:CRACHA3:1540809884424208394> **Recusado por:** {interaction.user.mention}"
             ),
 
