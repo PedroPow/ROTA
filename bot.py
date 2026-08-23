@@ -1070,8 +1070,16 @@ def carregar_inscricoes() -> dict:
     if not os.path.exists(INSCRICOES_DB_PATH):
         with open(INSCRICOES_DB_PATH, "w", encoding="utf-8") as arquivo:
             json.dump({}, arquivo)
-    with open(INSCRICOES_DB_PATH, "r", encoding="utf-8") as arquivo:
-        return json.load(arquivo)
+    try:
+        with open(INSCRICOES_DB_PATH, "r", encoding="utf-8") as arquivo:
+            conteudo = arquivo.read().strip()
+        if not conteudo:
+            return {}
+        dados = json.loads(conteudo)
+        return dados if isinstance(dados, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        print("⚠️ inscricoes.json vazio ou inválido; iniciando banco de inscrições vazio.")
+        return {}
 
 
 def salvar_inscricoes(dados: dict) -> None:
