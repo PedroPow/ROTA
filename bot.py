@@ -1353,6 +1353,11 @@ async def on_ready():
 
     # ================= SYNC SLASH =================
     try:
+        # Remove versões globais antigas. Os comandos deste bot são registrados
+        # somente no servidor configurado abaixo.
+        bot.tree.clear_commands(guild=None)
+        await bot.tree.sync()
+
         synced = await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
         print(f"🔧 Slash Commands sincronizados: {[cmd.name for cmd in synced]}")
     except Exception as e:
