@@ -1116,6 +1116,8 @@ class InscricaoModal(Modal, title="Ficha de Inscrição - PM"):
             await interaction.response.send_message(embed=embed_ephemeral(bloqueio, "aviso"), ephemeral=True)
             return
 
+        await interaction.response.defer(ephemeral=True)
+
         codigo = codigo_inscricao()
         dados[codigo] = {
             "codigo": codigo,
@@ -1130,17 +1132,23 @@ class InscricaoModal(Modal, title="Ficha de Inscrição - PM"):
         }
         salvar_inscricoes(dados)
 
-        embed = discord.Embed(title=f"Inscrição recebida - ||`{codigo}`||", color=discord.Color.yellow())
-        embed.add_field(name="Nome In-Game", value=self.nome.value, inline=False)
-        embed.add_field(name="Idade In-Narnia", value=self.idade.value, inline=False)
-        embed.add_field(name="Identificação", value=self.identificacao.value, inline=False)
-        embed.add_field(name="Experiência", value=self.experiencia.value, inline=False)
-        embed.add_field(name="Solicitante", value=interaction.user.mention, inline=False)
+        embed = discord.Embed(
+            title=f"<:CRACHA:1540808611436167208> Inscrição Recebida - ||`{codigo}`||",
+            color=discord.Color.from_rgb(255, 204, 0),
+        )
+        embed.add_field(name="<:pessoas:1540780605237760050> Nome In-Game:", value=f"**```{self.nome.value}```**", inline=False)
+        embed.add_field(name="<:hora:1540778295115780136> Idade In-Narnia:", value=f"**```{self.idade.value}```**", inline=False)
+        embed.add_field(name="<:111:1540791811310747759> Identificação (ID):", value=f"**```{self.identificacao.value}```**", inline=False)
+        embed.add_field(name="<:222:1540799996251865108> Experiência Operacional:", value=f"**```{self.experiencia.value}```**", inline=False)
+        embed.add_field(name="<:CRACHA:1540808611436167208> Solicitante:", value=interaction.user.mention, inline=False)
+        embed.set_image(url="https://cdn.discordapp.com/attachments/1444735189765849320/1541186562304249916/9_bpm_INSCRICOES_.png?ex=6a8cad56&is=6a8b5bd6&hm=b009c2fe3f7f4f62cce3091b34e7249e6149a7befef88837528e7b822d6ec3b1&")
+        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8c9598&is=6a8b4418&hm=0b9faa95c5cc5c9231eb5090e3ba60d87bbcf067a833b9fe9c655d32bc737a87&")
+        embed.set_footer(text="Batalhão 9° BPM/M Virtual® Todos os direitos reservados.")
 
         canal = interaction.client.get_channel(LOG_CHANNEL_INSCRICOES)
         if canal:
             await canal.send(embed=embed, view=ViewDecisaoInscricao(codigo))
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=embed_ephemeral(f"Inscrição enviada. Código: ||`{codigo}`||", "sucesso"),
             ephemeral=True,
         )
@@ -1179,8 +1187,47 @@ class DecisaoInscricao(Button):
         registro["status"] = "aprovado" if self.aprovado else "reprovado"
         registro["decididoPor"] = str(interaction.user)
         salvar_inscricoes(dados)
-        await interaction.response.edit_message(view=None)
-        await interaction.followup.send(embed=embed_ephemeral("Inscrição aprovada." if self.aprovado else "Inscrição reprovada.", "sucesso" if self.aprovado else "aviso"), ephemeral=True)
+
+        membro = interaction.guild.get_member(int(registro["userId"])) if interaction.guild else None
+        if self.aprovado and membro:
+            cargo = interaction.guild.get_role(ROLE_AUTOROLE_ID)
+            if cargo:
+                try:
+                    await membro.add_roles(cargo)
+                except discord.HTTPException as erro:
+                    print(f"Erro ao adicionar cargo da inscrição: {erro}")
+
+        mensagem = "Inscrição aprovada." if self.aprovado else "Inscrição reprovada."
+        embed_original = interaction.message.embeds[0] if interaction.message.embeds else discord.Embed()
+        embed_original.title = (
+            f"<:CRACHA2:1540808930572243004> Inscrição Aprovada - ||`{self.codigo}`||"
+            if self.aprovado else
+            f"<:CRACHA3:1540809884424208394> Inscrição Reprovada - ||`{self.codigo}`||"
+        )
+        embed_original.color = discord.Color.green() if self.aprovado else discord.Color.red()
+        embed_original.add_field(
+            name="Aprovado por:" if self.aprovado else "Reprovado por:",
+            value=interaction.user.mention,
+            inline=True,
+        )
+        await interaction.response.edit_message(embed=embed_original, view=None)
+        await interaction.followup.send(embed=embed_ephemeral(mensagem, "sucesso" if self.aprovado else "aviso"), ephemeral=True)
+
+        if membro:
+            try:
+                texto = (
+                    f"Sua inscrição **`{self.codigo}`** foi **aprovada**!\n"
+                    "Você recebeu o cargo **Sem Set**. Acesse o canal de funcional para continuar."
+                    if self.aprovado else
+                    f"Sua inscrição **`{self.codigo}`** foi **reprovada**.\nAguarde futuros processos seletivos."
+                )
+                await membro.send(embed=discord.Embed(
+                    title="<:CRACHA2:1540808930572243004> Inscrição Aprovada" if self.aprovado else "<:CRACHA3:1540809884424208394> Inscrição Reprovada",
+                    description=texto,
+                    color=discord.Color.green() if self.aprovado else discord.Color.red(),
+                ))
+            except discord.HTTPException:
+                pass
 
 
 class ViewDecisaoInscricao(View):
@@ -1192,7 +1239,25 @@ class ViewDecisaoInscricao(View):
 
 @bot.tree.command(name="inscricao", description="Abre o painel de inscrições.", guild=discord.Object(id=GUILD_ID))
 async def inscricao(interaction: discord.Interaction):
-    embed = discord.Embed(title="Concurso Batalhão 9° BPM/M", description="Clique no botão abaixo para fazer sua inscrição.", color=discord.Color.yellow())
+    embed = discord.Embed(
+        title="<:Logo_PMESP:1541187750932389908> Concurso Batalhão 9° BPM/M Virtual®",
+        description=(
+            "Bem-vindo ao processo seletivo interno da **Polícia Militar**!\n\n"
+            "Preencha o formulário de inscrição clicando no botão abaixo.\n"
+            "Sua inscrição será analisada pelos superiores do batalhão.\n\n"
+            "<:CERTIFICADO:1540945192150896740> Requisitos:\n\n"
+            "<:ponto:1540777974427553862> Idade mínima de 18 anos.\n"
+            "<:ponto:1540777974427553862> Ensino médio completo.\n"
+            "<:ponto:1540777974427553862> Comprometimento.\n"
+            "<:ponto:1540777974427553862> Respeito à hierarquia.\n"
+            "<:ponto:1540777974427553862> Disponibilidade.\n\n"
+            "<:111:1540791811310747759> Dúvidas: entre em contato com a equipe de RH."
+        ),
+        color=discord.Color.from_rgb(255, 204, 0),
+    )
+    embed.set_image(url="https://cdn.discordapp.com/attachments/1444735189765849320/1541186562304249916/9_bpm_INSCRICOES_.png?ex=6a8cad56&is=6a8b5bd6&hm=b009c2fe3f7f4f62cce3091b34e7249e6149a7befef88837528e7b822d6ec3b1&")
+    embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8c9598&is=6a8b4418&hm=0b9faa95c5cc5c9231eb5090e3ba60d87bbcf067a833b9fe9c655d32bc737a87&")
+    embed.set_footer(text="Batalhão 9° BPM/M Virtual® Todos os direitos reservados.")
     await interaction.response.send_message(embed=embed, view=ViewInscricao())
 
 
