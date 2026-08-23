@@ -7,6 +7,8 @@ import aiohttp
 import io
 import os
 import json
+import random
+from datetime import datetime, timezone
 
 import database as db
 
@@ -38,6 +40,8 @@ LOG_CHANNEL_BAN = 1343398653301358625
 LOG_CHANNEL_MENSAGEM = 1540762061338845235
 LOG_CHANNEL_FUNCIONAL_APROVADO = 1540761917638058015
 LOG_CHANNEL_FUNCIONAL_RECUSADO = 1540761917638058015
+LOG_CHANNEL_INSCRICOES = 1480372275575525517
+INSCRICOES_DB_PATH = os.path.join(os.path.dirname(__file__), "inscricoes.json")
 
 # Advertências
 ID_CARGO_ADV1 = 1343788657760534619
@@ -1060,6 +1064,155 @@ async def buscar_funcional(interaction: discord.Interaction, codigo: str):
     await interaction.followup.send(embed=embed, ephemeral=True)
 
 
+# ================= INSCRIÇÕES =================
+
+def carregar_inscricoes() -> dict:
+    if not os.path.exists(INSCRICOES_DB_PATH):
+        with open(INSCRICOES_DB_PATH, "w", encoding="utf-8") as arquivo:
+            json.dump({}, arquivo)
+    with open(INSCRICOES_DB_PATH, "r", encoding="utf-8") as arquivo:
+        return json.load(arquivo)
+
+
+def salvar_inscricoes(dados: dict) -> None:
+    with open(INSCRICOES_DB_PATH, "w", encoding="utf-8") as arquivo:
+        json.dump(dados, arquivo, ensure_ascii=False, indent=2)
+
+
+def bloqueio_inscricao(user_id: int, dados: dict | None = None) -> str | None:
+    dados = carregar_inscricoes() if dados is None else dados
+    if str(user_id) in dados.get("blacklist", {}):
+        return "Você está na blacklist e não pode fazer inscrição."
+    registros = [
+        item for item in dados.values()
+        if isinstance(item, dict) and item.get("userId") == str(user_id)
+    ]
+    if any(item.get("status") == "aprovado" for item in registros):
+        return "Você já foi aprovado e não pode fazer outra inscrição."
+    if any(item.get("status") == "pendente" for item in registros):
+        return "Você já tem uma inscrição em aberto."
+    return None
+
+
+def codigo_inscricao() -> str:
+    dados = carregar_inscricoes()
+    while True:
+        codigo = "INS-" + "".join(random.choices("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", k=6))
+        if codigo not in dados:
+            return codigo
+
+
+class InscricaoModal(Modal, title="Ficha de Inscrição - PM"):
+    nome = TextInput(label="Nome In-Game", max_length=50)
+    idade = TextInput(label="Idade In-Narnia", max_length=10)
+    identificacao = TextInput(label="Identificação (ID)", max_length=20)
+    experiencia = TextInput(label="Experiência Operacional", style=discord.TextStyle.paragraph, max_length=500)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        dados = carregar_inscricoes()
+        bloqueio = bloqueio_inscricao(interaction.user.id, dados)
+        if bloqueio:
+            await interaction.response.send_message(embed=embed_ephemeral(bloqueio, "aviso"), ephemeral=True)
+            return
+
+        codigo = codigo_inscricao()
+        dados[codigo] = {
+            "codigo": codigo,
+            "userId": str(interaction.user.id),
+            "username": str(interaction.user),
+            "nome": self.nome.value,
+            "idade": self.idade.value,
+            "id": self.identificacao.value,
+            "exp": self.experiencia.value,
+            "status": "pendente",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        salvar_inscricoes(dados)
+
+        embed = discord.Embed(title=f"Inscrição recebida - ||`{codigo}`||", color=discord.Color.yellow())
+        embed.add_field(name="Nome In-Game", value=self.nome.value, inline=False)
+        embed.add_field(name="Idade In-Narnia", value=self.idade.value, inline=False)
+        embed.add_field(name="Identificação", value=self.identificacao.value, inline=False)
+        embed.add_field(name="Experiência", value=self.experiencia.value, inline=False)
+        embed.add_field(name="Solicitante", value=interaction.user.mention, inline=False)
+
+        canal = interaction.client.get_channel(LOG_CHANNEL_INSCRICOES)
+        if canal:
+            await canal.send(embed=embed, view=ViewDecisaoInscricao(codigo))
+        await interaction.response.send_message(
+            embed=embed_ephemeral(f"Inscrição enviada. Código: ||`{codigo}`||", "sucesso"),
+            ephemeral=True,
+        )
+
+
+class ViewInscricao(View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Fazer Inscrição", style=discord.ButtonStyle.secondary, custom_id="abrir_inscricao")
+    async def abrir(self, interaction: discord.Interaction, button: Button):
+        bloqueio = bloqueio_inscricao(interaction.user.id)
+        if bloqueio:
+            await interaction.response.send_message(embed=embed_ephemeral(bloqueio, "aviso"), ephemeral=True)
+            return
+        await interaction.response.send_modal(InscricaoModal())
+
+
+class DecisaoInscricao(Button):
+    def __init__(self, codigo: str, aprovado: bool):
+        self.codigo = codigo
+        self.aprovado = aprovado
+        acao = "aprovar" if aprovado else "reprovar"
+        super().__init__(label="Aprovar" if aprovado else "Reprovar", style=discord.ButtonStyle.success if aprovado else discord.ButtonStyle.danger, custom_id=f"insc_{acao}:{codigo}")
+
+    async def callback(self, interaction: discord.Interaction):
+        if not has_authorized_role(interaction.user):
+            await interaction.response.send_message(embed=embed_ephemeral("Sem permissão.", "erro"), ephemeral=True)
+            return
+        dados = carregar_inscricoes()
+        registro = dados.get(self.codigo)
+        if not registro or registro.get("status") != "pendente":
+            await interaction.response.send_message(embed=embed_ephemeral("Inscrição não encontrada ou já processada.", "erro"), ephemeral=True)
+            return
+
+        registro["status"] = "aprovado" if self.aprovado else "reprovado"
+        registro["decididoPor"] = str(interaction.user)
+        salvar_inscricoes(dados)
+        await interaction.response.edit_message(view=None)
+        await interaction.followup.send(embed=embed_ephemeral("Inscrição aprovada." if self.aprovado else "Inscrição reprovada.", "sucesso" if self.aprovado else "aviso"), ephemeral=True)
+
+
+class ViewDecisaoInscricao(View):
+    def __init__(self, codigo: str):
+        super().__init__(timeout=None)
+        self.add_item(DecisaoInscricao(codigo, True))
+        self.add_item(DecisaoInscricao(codigo, False))
+
+
+@bot.tree.command(name="inscricao", description="Abre o painel de inscrições.", guild=discord.Object(id=GUILD_ID))
+async def inscricao(interaction: discord.Interaction):
+    embed = discord.Embed(title="Concurso Batalhão 9° BPM/M", description="Clique no botão abaixo para fazer sua inscrição.", color=discord.Color.yellow())
+    await interaction.response.send_message(embed=embed, view=ViewInscricao())
+
+
+@bot.tree.command(name="blacklist_inscricao", description="Adiciona ou remove um membro da blacklist.", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(membro="Membro da blacklist", acao="Adicionar ou remover")
+@app_commands.choices(acao=[app_commands.Choice(name="Adicionar", value="adicionar"), app_commands.Choice(name="Remover", value="remover")])
+async def blacklist_inscricao(interaction: discord.Interaction, membro: discord.Member, acao: app_commands.Choice[str]):
+    if not await require_authorized(interaction):
+        return
+    dados = carregar_inscricoes()
+    blacklist = dados.setdefault("blacklist", {})
+    if acao.value == "adicionar":
+        blacklist[str(membro.id)] = {"username": str(membro), "por": str(interaction.user), "timestamp": datetime.now(timezone.utc).isoformat()}
+        mensagem = f"{membro.mention} foi adicionado à blacklist."
+    else:
+        blacklist.pop(str(membro.id), None)
+        mensagem = f"{membro.mention} foi removido da blacklist."
+    salvar_inscricoes(dados)
+    await interaction.response.send_message(embed=embed_ephemeral(mensagem, "sucesso"), ephemeral=True)
+
+
 # ================= READY =================
 
 @bot.event
@@ -1070,6 +1223,10 @@ async def on_ready():
     bot.add_view(TicketView())
     bot.add_view(ConfirmarOuFecharView())
     bot.add_view(PainelAdminView())
+    bot.add_view(ViewInscricao())
+    for codigo, registro in carregar_inscricoes().items():
+        if isinstance(registro, dict) and registro.get("status") == "pendente":
+            bot.add_view(ViewDecisaoInscricao(codigo))
 
     # o resto (purge, envio de painel, sync de slash commands) só deve
     # rodar UMA vez por processo — repetir isso a cada reconexão soma
