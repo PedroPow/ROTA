@@ -238,7 +238,7 @@ async def enviar_painel(guild: discord.Guild):
 # ============================
 #        COMANDO /clearall
 # ============================
-@bot.tree.command(name="clearall", description="Apaga todas as mensagens do canal atual.", guild=discord.Object(id=GUILD_ID))
+@bot.tree.command(name="clearall", description="Apaga todas as mensagens do canal atual.")
 async def clearall(interaction: discord.Interaction):
     if not await require_authorized(interaction):
         return
@@ -390,7 +390,7 @@ class MensagemModal(Modal, title="📢 Enviar Mensagem"):
                 pass
 
 
-@bot.tree.command(name="mensagem", description="Enviar mensagem como o bot.", guild=discord.Object(id=GUILD_ID))
+@bot.tree.command(name="mensagem", description="Enviar mensagem como o bot.")
 async def mensagem(interaction: discord.Interaction):
     if not await require_authorized(interaction):
         return
@@ -400,7 +400,7 @@ async def mensagem(interaction: discord.Interaction):
 # ============================
 #      SISTEMA DE ADVs
 # ============================
-@bot.tree.command(name="adv", description="Aplica advertência.", guild=discord.Object(id=GUILD_ID))
+@bot.tree.command(name="adv", description="Aplica advertência.")
 async def adv(interaction: discord.Interaction, membro: discord.Member, motivo: str):
     if not await require_authorized(interaction):
         return
@@ -481,7 +481,7 @@ async def adv(interaction: discord.Interaction, membro: discord.Member, motivo: 
 # ============================
 #            BAN
 # ============================
-@bot.tree.command(name="ban", description="Bane um membro.", guild=discord.Object(id=GUILD_ID))
+@bot.tree.command(name="ban", description="Bane um membro.")
 async def ban(interaction: discord.Interaction, membro: discord.Member, motivo: str):
     if not await require_authorized(interaction):
         return
@@ -1028,7 +1028,6 @@ class ConfirmarOuFecharView(View):
 @bot.tree.command(
     name="buscar-funcional",
     description="Consulta uma solicitação de funcional pelo código (ex: FT-8K2P4X).",
-    guild=discord.Object(id=GUILD_ID),
 )
 async def buscar_funcional(interaction: discord.Interaction, codigo: str):
     if not await require_authorized(interaction):
@@ -1237,7 +1236,7 @@ class ViewDecisaoInscricao(View):
         self.add_item(DecisaoInscricao(codigo, False))
 
 
-@bot.tree.command(name="inscricao", description="Abre o painel de inscrições.", guild=discord.Object(id=GUILD_ID))
+@bot.tree.command(name="inscricao", description="Abre o painel de inscrições.")
 async def inscricao(interaction: discord.Interaction):
     embed = discord.Embed(
         title="<:Logo_PMESP:1541187750932389908> Concurso Batalhão 9° BPM/M Virtual®",
@@ -1261,7 +1260,7 @@ async def inscricao(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=ViewInscricao())
 
 
-@bot.tree.command(name="blacklist_inscricao", description="Adiciona ou remove um membro da blacklist.", guild=discord.Object(id=GUILD_ID))
+@bot.tree.command(name="blacklist_inscricao", description="Adiciona ou remove um membro da blacklist.")
 @app_commands.describe(membro="Membro da blacklist", acao="Adicionar ou remover")
 @app_commands.choices(acao=[app_commands.Choice(name="Adicionar", value="adicionar"), app_commands.Choice(name="Remover", value="remover")])
 async def blacklist_inscricao(interaction: discord.Interaction, membro: discord.Member, acao: app_commands.Choice[str]):
@@ -1353,13 +1352,11 @@ async def on_ready():
 
     # ================= SYNC SLASH =================
     try:
-        # Remove versões globais antigas. Os comandos deste bot são registrados
-        # somente no servidor configurado abaixo.
-        bot.tree.clear_commands(guild=None)
-        await bot.tree.sync()
-
-        synced = await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
-        print(f"🔧 Slash Commands sincronizados: {[cmd.name for cmd in synced]}")
+        # A sincronização global substitui versões globais antigas pela lista
+        # completa de comandos declarada neste arquivo.
+        await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
+        synced = await bot.tree.sync()
+        print(f"🔧 Slash Commands globais sincronizados: {[cmd.name for cmd in synced]}")
     except Exception as e:
         print(f"Erro ao sincronizar comandos: {e}")
 
