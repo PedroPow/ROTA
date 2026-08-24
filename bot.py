@@ -840,10 +840,10 @@ async def adv(interaction: discord.Interaction, membro: discord.Member, acao: ap
         f"> {interaction.user.mention}\n\n"
 
         f"<:baixar:1540778990615273533> Advertências aplicadas:\n" 
-        f"> **{nivel}/2**\n\n"
+        f"```**{nivel}/2**```\n\n"
 
         f"<:222:1540799996251865108> **Motivo:**\n" 
-        f"> {motivo}",
+        f"```{motivo}```",
         color=discord.Color.yellow(),
     )
 
@@ -1843,7 +1843,11 @@ class DecisaoInscricao(Button):
         )
         embed_original.color = discord.Color.green() if self.aprovado else discord.Color.red()
         embed_original.add_field(
-            name="Aprovado por:" if self.aprovado else "Reprovado por:",
+            name=(
+                "<:CRACHA2:1540808930572243004> Aprovado por:"
+                if self.aprovado
+                else "<:CRACHA3:1540809884424208394> Reprovado por:"
+            ),
             value=interaction.user.mention,
             inline=True,
         )
