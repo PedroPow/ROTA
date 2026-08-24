@@ -78,6 +78,14 @@ CURSOS_DISPONIVEIS = [
     "Curso de TAT III", "SAT A", "SAT B",
 ]
 
+# ============================
+#         CARGOS AURORIZADOS USAR COMANDOS / 
+# ============================
+ROLE_VUNESP_ID = 1469854597802754058
+ROLE_INSTRUTOR_ID = 1343646363006668911
+ROLE_P1_ID = 1449998328334123208
+
+
 
 def cursos_conn() -> sqlite3.Connection:
     conn = sqlite3.connect(CURSOS_DB_PATH)
@@ -414,7 +422,10 @@ async def require_role(interaction: discord.Interaction, role_id: int, nome_carg
     membro = interaction.user
     if not isinstance(membro, discord.Member) or not any(role.id == role_id for role in membro.roles):
         await interaction.response.send_message(
-            embed=embed_ephemeral(f"Você precisa do cargo **{nome_cargo}** para usar este comando.", "erro"),
+            embed=embed_ephemeral(
+                f"Você precisa do cargo <@&{role_id}> para usar este comando.",
+                "erro",
+            ),
             ephemeral=True,
         )
         return False
@@ -479,7 +490,7 @@ async def enviar_painel(guild: discord.Guild):
 # ============================
 #        COMANDO /clearall
 # ============================
-@bot.tree.command(name="clearall", description="Apaga todas as mensagens do canal atual.")
+@bot.tree.command(name="clearall", description="Apaga todas as mensagens do canal atual. (apenas VUNESP)")
 async def clearall(interaction: discord.Interaction):
     if not await require_role(interaction, 1469854597802754058, "VUNESP"):
         return
@@ -1505,7 +1516,7 @@ class ViewDecisaoInscricao(View):
 
 @bot.tree.command(name="inscricao", description="Abre o painel de inscrições do concurso. (Apenas Instrutores)")
 async def inscricao(interaction: discord.Interaction):
-    if not await require_role(interaction, ROLE_INSTRUTOR_ID, "Instrutor"):
+    if not await require_role(interaction, ROLE_INSTRUTOR_ID, f"<@&{ROLE_INSTRUTOR_ID}>"):
         return
     embed = discord.Embed(
         title="<:Logo_PMESP:1541187750932389908> Concurso Batalhão 9° BPM/M Virtual®",
@@ -1533,7 +1544,7 @@ async def inscricao(interaction: discord.Interaction):
 @app_commands.describe(membro="Membro da blacklist", acao="Adicionar ou remover")
 @app_commands.choices(acao=[app_commands.Choice(name="Adicionar", value="adicionar"), app_commands.Choice(name="Remover", value="remover")])
 async def blacklist_inscricao(interaction: discord.Interaction, membro: discord.Member, acao: app_commands.Choice[str]):
-    if not await require_role(interaction, ROLE_INSTRUTOR_ID, "Instrutor"):
+    if not await require_role(interaction, ROLE_INSTRUTOR_ID, f"<@&{ROLE_INSTRUTOR_ID}>"):
         return
     dados = carregar_inscricoes()
     blacklist = dados.setdefault("blacklist", {})
