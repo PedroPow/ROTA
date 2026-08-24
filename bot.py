@@ -1122,23 +1122,32 @@ class DadosPessoaisModal(Modal, title="Registro do Policial"):
 
         embed = Embed(
             title=f"<:CRACHA:1540808611436167208> **Solicitação de Funcional ||`{codigo}`||**",
-            description=(
-                f"<:pessoas:1540780605237760050> **Nome:**"
-                f"`{nome}`\n\n"  
-
-                f"<:111:1540791811310747759> **Identificação:**"
-                f"`{passaporte}`\n\n"
-
-                f"<:222:1540799996251865108> **Companhia:**"
-                f"`{self.cia}`\n\n"             
-
-                f"<:paineladmin:1540780905902374982> **Patente:**"
-                f"`{self.patente_nome}`\n\n"   
-
-                 f"<:CRACHA:1540808611436167208> **Solicitante:**" 
-                f"{interaction.user.mention}\n\n"             
-            ),
             color=discord.Color.yellow(),
+        )
+        embed.add_field(
+            name="<:pessoas:1540780605237760050> Nome:",
+            value=f"`{nome}`",
+            inline=True,
+        )
+        embed.add_field(
+            name="<:111:1540791811310747759> Identificação:",
+            value=f"`{passaporte}`",
+            inline=True,
+        )
+        embed.add_field(
+            name="<:222:1540799996251865108> Companhia:",
+            value=f"`{self.cia}`",
+            inline=True,
+        )
+        embed.add_field(
+            name="<:paineladmin:1540780905902374982> Patente:",
+            value=f"`{self.patente_nome}`",
+            inline=True,
+        )
+        embed.add_field(
+            name="<:CRACHA:1540808611436167208> Solicitante:",
+            value=interaction.user.mention,
+            inline=False,
         )
         embed.set_thumbnail(
             url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8b4418&is=6a89f298&hm=ccef0422a39e4382dc5e5b9858c859cb3a0dd81a22eac8f643b85ee6fa955c8f&"
