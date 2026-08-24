@@ -9,6 +9,7 @@ import io
 import os
 import json
 import random
+import sqlite3
 from datetime import datetime, timezone
 
 import database as db
@@ -56,6 +57,228 @@ CARGOS_AUTORIZADOS = [
 ]
 
 # ============================
+#         SISTEMA DE CURSOS
+# ============================
+CANAL_PAINEL_CURSOS = 1475911649151025325
+CANAL_CANDIDATOS_CURSOS = 1475935737215193280
+CANAL_LOGS_CURSOS = 1540946606038188114
+CANAL_CONTROLE_CURSOS = 1476076702777081857
+CANAL_CERTIFICADOS = 1476077153547325440
+CARGOS_INSTRUTOR = [1343646363006668911]
+CURSOS_DB_PATH = os.path.join(os.path.dirname(__file__), "sistema_rota.db")
+BANNER_CURSO = "https://cdn.discordapp.com/attachments/1444735189765849320/1540875386370654339/9_bpm_CERTIFICADOS_.png?ex=6a8b8b88&is=6a8a3a08&hm=30cb17163b540766a63085d6b5dd4b6e08bac133a273dd2bb9595ce8cb4f2511&"
+BANNER_CERTIFICADO = "https://cdn.discordapp.com/attachments/1444735189765849320/1540874527670800455/DIPLONA_9BPM.png?ex=6a8b8abb&is=6a8a393b&hm=15445fe302f40d3137131451da853ab12b22a8e0929702f0a7a026d2e8deb6c3&"
+CURSOS_DISPONIVEIS = [
+    "Curso Op. Especial", "Curso Superior de Polícia Militar", "Curso de Aperfeiçoamento de Oficiais",
+    "Curso de Formação de Oficiais", "Curso de Formação de Sargentos", "Curso de Formação de Cabos",
+    "Curso de Formação de Soldados", "Curso de P.O.P", "Curso de Abordagem e Posicionamento",
+    "Curso de Modulação", "Curso de Confecção de BOPM", "Curso de TAT I", "Curso de TAT II",
+    "Curso de TAT III", "SAT A", "SAT B",
+]
+
+
+def cursos_conn() -> sqlite3.Connection:
+    conn = sqlite3.connect(CURSOS_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def iniciar_db_cursos() -> None:
+    with cursos_conn() as conn:
+        conn.execute("CREATE TABLE IF NOT EXISTS cursos (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT, data TEXT, horario TEXT, local TEXT, vagas INTEGER, instrutor_id INTEGER, msg_id INTEGER, canal_id INTEGER, status TEXT DEFAULT 'ABERTO')")
+        conn.execute("CREATE TABLE IF NOT EXISTS inscritos (curso_id INTEGER, user_id INTEGER, tipo TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(curso_id, user_id))")
+        conn.execute("CREATE TABLE IF NOT EXISTS config (chave TEXT PRIMARY KEY, valor INTEGER)")
+        conn.execute("INSERT OR IGNORE INTO config (chave, valor) VALUES ('cert_count', 0)")
+
+
+def eh_instrutor(member: discord.Member) -> bool:
+    return any(role.id in CARGOS_INSTRUTOR for role in getattr(member, "roles", []))
+
+
+def estilo_curso(embed: discord.Embed) -> discord.Embed:
+    embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8c9598&is=6a8b4418&hm=0b9faa95c5cc5c9231eb5090e3ba60d87bbcf067a833b9fe9c655d32bc737a87&")
+    embed.set_footer(text="Batalhão 9° BPM/M Virtual® Todos direitos reservados", icon_url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8c9598&is=6a8b4418&hm=0b9faa95c5cc5c9231eb5090e3ba60d87bbcf067a833b9fe9c655d32bc737a87&")
+    return embed
+
+
+async def log_curso(titulo: str, descricao: str, cor: discord.Color = discord.Color.yellow()):
+    canal = bot.get_channel(CANAL_LOGS_CURSOS)
+    if canal:
+        await canal.send(embed=estilo_curso(discord.Embed(title=titulo, description=descricao, color=cor)))
+
+
+async def atualizar_curso(curso_id: int, mensagem: discord.Message | None = None):
+    with cursos_conn() as conn:
+        curso = conn.execute("SELECT * FROM cursos WHERE id=?", (curso_id,)).fetchone()
+        alunos = conn.execute("SELECT user_id FROM inscritos WHERE curso_id=? AND tipo='ALUNO' ORDER BY timestamp", (curso_id,)).fetchall()
+        fila = conn.execute("SELECT user_id FROM inscritos WHERE curso_id=? AND tipo='FILA' ORDER BY timestamp", (curso_id,)).fetchall()
+    if not curso:
+        return
+    limite = curso["vagas"] or 0
+    status = "🔴 CURSO FINALIZADO" if curso["status"] == "FINALIZADO" else ("🟢 INSCRIÇÕES ABERTAS" if not limite or len(alunos) < limite else "🟡 EM FILA DE ESPERA")
+    embed = discord.Embed(title=f"`{curso['nome']}`", description=f"**Status:** `{status}`", color=0x2F3136)
+    embed.add_field(name="Data:", value=f"`{curso['data']}`", inline=True)
+    embed.add_field(name="Horário:", value=f"`{curso['horario']}`", inline=True)
+    embed.add_field(name="Local:", value=f"`{curso['local']}`", inline=True)
+    embed.add_field(name=f"Inscritos: ({len(alunos)}/{limite or 'Ilimitado'})", value="\n".join(f"<@{row['user_id']}>" for row in alunos) or "_Nenhum inscrito_", inline=False)
+    embed.add_field(name=f"Fila de Espera: ({len(fila)})", value="\n".join(f"<@{row['user_id']}>" for row in fila) or "_Vazia_", inline=False)
+    embed.set_image(url=BANNER_CURSO)
+    estilo_curso(embed)
+    if mensagem is None:
+        canal = bot.get_channel(curso["canal_id"])
+        if canal:
+            try:
+                mensagem = await canal.fetch_message(curso["msg_id"])
+            except discord.HTTPException:
+                return
+    if mensagem:
+        await mensagem.edit(embed=embed, view=None if curso["status"] == "FINALIZADO" else CursoInscricaoView(curso_id))
+
+
+class CursoInscricaoView(View):
+    def __init__(self, curso_id: int):
+        super().__init__(timeout=None)
+        self.curso_id = curso_id
+        inscrever = Button(label="INSCREVER-SE", style=discord.ButtonStyle.secondary, custom_id=f"curso_inscrever:{curso_id}")
+        cancelar = Button(label="CANCELAR", style=discord.ButtonStyle.secondary, custom_id=f"curso_cancelar:{curso_id}")
+        inscrever.callback = self.inscrever
+        cancelar.callback = self.cancelar
+        self.add_item(inscrever)
+        self.add_item(cancelar)
+
+    async def inscrever(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        with cursos_conn() as conn:
+            curso = conn.execute("SELECT status, vagas FROM cursos WHERE id=?", (self.curso_id,)).fetchone()
+            if not curso or curso["status"] == "FINALIZADO":
+                return await interaction.followup.send(embed=embed_ephemeral("Curso não encontrado ou já finalizado.", "aviso"), ephemeral=True)
+            if conn.execute("SELECT 1 FROM inscritos WHERE curso_id=? AND user_id=?", (self.curso_id, interaction.user.id)).fetchone():
+                return await interaction.followup.send(embed=embed_ephemeral("Você já está na lista.", "aviso"), ephemeral=True)
+            total = conn.execute("SELECT COUNT(*) FROM inscritos WHERE curso_id=? AND tipo='ALUNO'", (self.curso_id,)).fetchone()[0]
+            tipo = "ALUNO" if not curso["vagas"] or total < curso["vagas"] else "FILA"
+            conn.execute("INSERT INTO inscritos (curso_id,user_id,tipo) VALUES (?,?,?)", (self.curso_id, interaction.user.id, tipo))
+        await interaction.followup.send(embed=embed_ephemeral("Inscrição realizada!" if tipo == "ALUNO" else "Curso lotado; você entrou na fila de espera.", "sucesso"), ephemeral=True)
+        await atualizar_curso(self.curso_id, interaction.message)
+        await log_curso("Nova Inscrição", f"Usuário: {interaction.user.mention}\nCurso ID: {self.curso_id}\nStatus: {tipo}", discord.Color.green())
+
+    async def cancelar(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        with cursos_conn() as conn:
+            row = conn.execute("SELECT tipo FROM inscritos WHERE curso_id=? AND user_id=?", (self.curso_id, interaction.user.id)).fetchone()
+            if not row:
+                return await interaction.followup.send(embed=embed_ephemeral("Você não está inscrito.", "erro"), ephemeral=True)
+            conn.execute("DELETE FROM inscritos WHERE curso_id=? AND user_id=?", (self.curso_id, interaction.user.id))
+            if row["tipo"] == "ALUNO":
+                proximo = conn.execute("SELECT user_id FROM inscritos WHERE curso_id=? AND tipo='FILA' ORDER BY timestamp LIMIT 1", (self.curso_id,)).fetchone()
+                if proximo:
+                    conn.execute("UPDATE inscritos SET tipo='ALUNO' WHERE curso_id=? AND user_id=?", (self.curso_id, proximo["user_id"]))
+        await interaction.followup.send(embed=embed_ephemeral("Removido da lista.", "sucesso"), ephemeral=True)
+        await atualizar_curso(self.curso_id, interaction.message)
+
+
+class ControleCursoView(View):
+    def __init__(self, curso_id: int):
+        super().__init__(timeout=None)
+        self.curso_id = curso_id
+        button = Button(label="EMITIR CERTIFICADOS", style=discord.ButtonStyle.gray, emoji="🎓", custom_id=f"curso_emitir:{curso_id}")
+        button.callback = self.emitir
+        self.add_item(button)
+
+    async def emitir(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        if not eh_instrutor(interaction.user):
+            return await interaction.followup.send(embed=embed_feedback("Erro", "Apenas instrutores."), ephemeral=True)
+        with cursos_conn() as conn:
+            curso = conn.execute("SELECT * FROM cursos WHERE id=?", (self.curso_id,)).fetchone()
+            alunos = conn.execute("SELECT user_id FROM inscritos WHERE curso_id=? AND tipo='ALUNO'", (self.curso_id,)).fetchall()
+            if not curso or curso["status"] == "FINALIZADO" or not alunos:
+                return await interaction.followup.send(embed=embed_feedback("Aviso", "Curso finalizado, inexistente ou sem alunos."), ephemeral=True)
+            conn.execute("UPDATE cursos SET status='FINALIZADO' WHERE id=?", (self.curso_id,))
+        canal = bot.get_channel(CANAL_CERTIFICADOS)
+        for aluno in alunos:
+            with cursos_conn() as conn:
+                conn.execute("UPDATE config SET valor=valor+1 WHERE chave='cert_count'")
+                numero = conn.execute("SELECT valor FROM config WHERE chave='cert_count'").fetchone()[0]
+            embed = discord.Embed(
+                title="<:CERTIFICADO:1540945192150896740> CERTIFICADO DE CONCLUSÃO",
+                description=(
+                    f"O Batalhão Força tática Virtual certifica que o policial <@{aluno['user_id']}> concluiu com êxito o curso **{curso['nome']}**, demonstrando elevado padrão de disciplina, dedicação operacional e comprometimento com a doutrina policial militar.\n\n"
+                    "Durante o período de instrução, o policial apresentou desempenho compatível com os princípios que regem as unidades de elite, mantendo postura profissional, respeito à hierarquia e constante busca pelo aprimoramento técnico.\n\n"
+                    "Que este certificado represente não apenas a conclusão de uma etapa, mas o fortalecimento do espírito de corpo, da honra policial militar e da missão de servir e proteger a sociedade.\n\n"
+                    "O Comando parabeniza pelo empenho demonstrado e incentiva a continuidade no mais alto nível de preparo, mantendo viva a tradição, a disciplina e a excelência operacional.\n\n"
+                    f"Curso:\n**`{curso['nome']}`**\n\n"
+                    f"Número do Certificado:\n**`ROTA-{datetime.now().year}-{numero:04d}`**\n\n"
+                    f"Instrutor Responsável: <@{curso['instrutor_id']}>"
+                ),
+                color=discord.Color.gold(),
+                timestamp=datetime.now(timezone.utc),
+            )
+            embed.set_image(url=BANNER_CERTIFICADO)
+            estilo_curso(embed)
+            if canal:
+                await canal.send(content=f"<@{aluno['user_id']}>", embed=embed)
+        await atualizar_curso(self.curso_id)
+        await interaction.followup.send(embed=embed_feedback("Sucesso", "Curso finalizado e certificados emitidos!"), ephemeral=True)
+
+
+class PainelCursosView(View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        menu = Select(placeholder="Escolha um curso...", options=[discord.SelectOption(label=nome, value=nome) for nome in CURSOS_DISPONIVEIS], custom_id="painel_cursos_select")
+        menu.callback = self.selecionar
+        self.add_item(menu)
+
+    async def selecionar(self, interaction: discord.Interaction):
+        if not eh_instrutor(interaction.user):
+            return await interaction.response.send_message(embed=embed_feedback("Erro", "Apenas instrutores podem abrir cursos."), ephemeral=True)
+        await interaction.response.send_modal(CursoModal(interaction.data["values"][0]))
+
+
+class CursoModal(Modal):
+    def __init__(self, nome: str):
+        super().__init__(title=f"Abrir: {nome}"[:45])
+        self.nome = nome
+        self.data_curso = TextInput(label="Data", placeholder="Ex: 22/08/2026")
+        self.horario = TextInput(label="Hora", placeholder="Ex: 20:00")
+        self.local = TextInput(label="Local", placeholder="Ex: Sala de Instrução")
+        self.vagas = TextInput(label="Vagas (0 para ilimitado)", default="5")
+        for campo in (self.data_curso, self.horario, self.local, self.vagas):
+            self.add_item(campo)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            vagas = int(self.vagas.value)
+            if vagas < 0:
+                raise ValueError
+        except ValueError:
+            return await interaction.response.send_message(embed=embed_feedback("Erro", "Vagas deve ser um número maior ou igual a zero."), ephemeral=True)
+        canal = bot.get_channel(CANAL_CANDIDATOS_CURSOS)
+        controle = bot.get_channel(CANAL_CONTROLE_CURSOS)
+        if not canal or not controle:
+            return await interaction.response.send_message(embed=embed_feedback("Erro", "Canal de cursos não encontrado."), ephemeral=True)
+        with cursos_conn() as conn:
+            cursor = conn.execute("INSERT INTO cursos (nome,data,horario,local,vagas,instrutor_id,canal_id) VALUES (?,?,?,?,?,?,?)", (self.nome, self.data_curso.value, self.horario.value, self.local.value, vagas, interaction.user.id, CANAL_CANDIDATOS_CURSOS))
+            curso_id = cursor.lastrowid
+        mensagem = await canal.send(embed=discord.Embed(description="📢 **Publicando edital de curso...**", color=discord.Color.blue()))
+        with cursos_conn() as conn:
+            conn.execute("UPDATE cursos SET msg_id=? WHERE id=?", (mensagem.id, curso_id))
+        await atualizar_curso(curso_id, mensagem)
+        controle_embed = discord.Embed(
+            title="<:CERTIFICADO:1540945192150896740> Painel de Controle do Curso",
+            color=discord.Color.yellow(),
+            timestamp=datetime.now(timezone.utc),
+        )
+        controle_embed.add_field(name="Curso:", value=f"`{self.nome}`", inline=True)
+        controle_embed.add_field(name="Vagas:", value=f"`{vagas if vagas > 0 else 'Ilimitadas'}`", inline=True)
+        controle_embed.add_field(name="Status Inicial:", value="`AGUARDANDO EMISSÃO`", inline=False)
+        controle_embed.add_field(name="Instrutor:", value=interaction.user.mention, inline=False)
+        await controle.send(embed=estilo_curso(controle_embed), view=ControleCursoView(curso_id))
+        await interaction.response.send_message(embed=embed_feedback("Sucesso", f"Curso de **{self.nome}** aberto com sucesso!"), ephemeral=True)
+
+
+iniciar_db_cursos()
+
+# ============================
 #   EMOJIS DAS MENSAGENS EPHEMERAL
 # ============================
 # Troque os valores abaixo por emojis customizados do seu servidor quando
@@ -99,6 +322,11 @@ def embed_ephemeral(descricao: str, tipo: str = "info", titulo: str | None = Non
     if titulo:
         embed.title = titulo
     return embed
+
+
+def embed_feedback(titulo: str, descricao: str, cor: discord.Color = discord.Color.yellow()) -> discord.Embed:
+    """Mantém o formato de feedback usado pelo sistema de cursos."""
+    return discord.Embed(title=titulo, description=descricao, color=cor)
 
 
 def embed_status_credencial(aprovado: bool) -> discord.Embed:
@@ -1179,7 +1407,7 @@ class DecisaoInscricao(Button):
         self.codigo = codigo
         self.aprovado = aprovado
         acao = "aprovar" if aprovado else "reprovar"
-        super().__init__(label="Aprovar" if aprovado else "Reprovar", style=discord.ButtonStyle.success if aprovado else discord.ButtonStyle.danger, custom_id=f"insc_{acao}:{codigo}")
+        super().__init__(label=f"<:CRACHA2:1540808930572243004> Aprovar" if aprovado else f"<:CRACHA3:1540809884424208394> Reprovar", style=discord.ButtonStyle.secondary if aprovado else discord.ButtonStyle.secondary, custom_id=f"insc_{acao}:{codigo}")
 
     async def callback(self, interaction: discord.Interaction):
         if not has_authorized_role(interaction.user):
@@ -1315,6 +1543,13 @@ async def on_ready():
     bot.add_view(ConfirmarOuFecharView())
     bot.add_view(PainelAdminView())
     bot.add_view(ViewInscricao())
+    bot.add_view(PainelCursosView())
+    with cursos_conn() as conn:
+        cursos_salvos = conn.execute("SELECT id, status FROM cursos").fetchall()
+    for curso_id, status in cursos_salvos:
+        if status != "FINALIZADO":
+            bot.add_view(CursoInscricaoView(curso_id))
+        bot.add_view(ControleCursoView(curso_id))
     for codigo, registro in carregar_inscricoes().items():
         if isinstance(registro, dict) and registro.get("status") == "pendente":
             bot.add_view(ViewDecisaoInscricao(codigo))
@@ -1336,6 +1571,24 @@ async def on_ready():
         return
 
     print(f"<:YES:1540777802935181444> Guild encontrada: {guild.name}")
+
+    canal_cursos = bot.get_channel(CANAL_PAINEL_CURSOS)
+    if canal_cursos:
+        try:
+            await canal_cursos.purge(limit=5)
+            painel_cursos = discord.Embed(
+                title="<:CERTIFICADO:1540945192150896740> PAINEL DE CURSOS",
+                description=(
+                    "<:ponto:1540777974427553862> Utilize o menu abaixo para abrir um novo curso.\n"
+                    f"<:ponto:1540777974427553862> Apenas (<@&{CARGOS_INSTRUTOR[0]}>) podem abrir cursos e emitir certificados.\n"
+                ),
+                color=0xFFFF00,
+            )
+            painel_cursos.set_image(url=BANNER_CURSO)
+            estilo_curso(painel_cursos)
+            await canal_cursos.send(embed=painel_cursos, view=PainelCursosView())
+        except discord.HTTPException as erro:
+            print(f"Erro ao enviar painel de cursos: {erro}")
 
     # ================= PAINEL SET =================
     try:
