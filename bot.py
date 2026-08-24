@@ -85,6 +85,13 @@ ROLE_VUNESP_ID = 1469854597802754058
 ROLE_INSTRUTOR_ID = 1343646363006668911
 ROLE_P1_ID = 1449998328334123208
 
+# ============================
+#       SISTEMA DE AUSÊNCIA
+# ============================
+CANAL_AUSENCIA_ID = 1449997864255357091
+LOG_AUSENCIA_ID = 1449997591713677362
+IMAGEM_AUSENCIA_URL = "https://cdn.discordapp.com/attachments/1444735189765849320/1541258863842427031/9_bpm_INSCRICOES_1.png?ex=6a8cf0ac&is=6a8b9f2c&hm=383831dac53fba8a329ad50147a4f85ab2806425e3f539750ffa8814196585fa&"
+
 
 
 def cursos_conn() -> sqlite3.Connection:
@@ -287,6 +294,79 @@ class CursoModal(Modal):
 
 
 iniciar_db_cursos()
+
+# ============================
+#       SISTEMA DE AUSÊNCIA
+# ============================
+def embed_painel_ausencia() -> discord.Embed:
+    embed = discord.Embed(
+        title="<:hora:1540778295115780136> **Sistema de Ausência**",
+        description=(
+            "Abaixo você poderá emitir uma ausência:\n\n"
+            "<:111:1540791811310747759> **Observação:**\n\n"
+            "<:ponto:1540777974427553862> Preencha todos os campos obrigatórios com informações precisas.\n"
+            "<:ponto:1540777974427553862> Após o envio, um membro da equipe irá analisar sua solicitação.\n"
+        ),
+        color=discord.Color.yellow(),
+    )
+    embed.set_image(url=IMAGEM_AUSENCIA_URL)
+    estilo_curso(embed)
+    return embed
+
+
+class AusenciaModal(Modal, title="Emitir Ausência"):
+    guarnicao = TextInput(label="Unidade", required=True, max_length=50)
+    motivo = TextInput(label="Motivo da ausência", style=discord.TextStyle.paragraph, required=True, max_length=300)
+    tempo = TextInput(label="Tempo de ausência", required=True, max_length=30)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        embed = discord.Embed(
+            title="<:hora:1540778295115780136> Registro de Ausência",
+            color=discord.Color.yellow(),
+            timestamp=datetime.now(timezone.utc),
+        )
+        embed.add_field(name="<:paineladmin:1540780905902374982> Unidade:", value=f"```{self.guarnicao.value}```", inline=True)
+        embed.add_field(name="<:hora:1540778295115780136> Tempo:", value=f"```{self.tempo.value}```", inline=True)
+        embed.add_field(name="<:222:1540799996251865108> Motivo:", value=f"```{self.motivo.value}```", inline=False)
+        embed.add_field(name="<:CRACHA:1540808611436167208> Solicitante:", value=interaction.user.mention, inline=False)
+        embed.set_image(url=IMAGEM_AUSENCIA_URL)
+        estilo_curso(embed)
+
+        canal_log = interaction.guild.get_channel(LOG_AUSENCIA_ID) if interaction.guild else None
+        if canal_log:
+            await canal_log.send(embed=embed)
+
+        await interaction.followup.send(
+            embed=embed_ephemeral("Sua ausência foi enviada com sucesso.", "sucesso", "Ausência Enviada"),
+            ephemeral=True,
+        )
+
+
+class AusenciaView(View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(
+        label="Emitir Ausência",
+        emoji="<:hora:1540778295115780136>",
+        style=discord.ButtonStyle.secondary,
+        custom_id="emitir_ausencia",
+    )
+    async def ausencia(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.send_modal(AusenciaModal())
+
+
+@bot.command(name="painel_ausencia")
+async def painel_ausencia(ctx: commands.Context):
+    if not isinstance(ctx.author, discord.Member) or not any(role.id == ROLE_VUNESP_ID for role in ctx.author.roles):
+        await ctx.send(embed=embed_feedback("Erro", f"Você precisa do cargo <@&{ROLE_VUNESP_ID}> para usar este comando."), delete_after=5)
+        return
+    canal = bot.get_channel(CANAL_AUSENCIA_ID)
+    if canal:
+        await canal.purge(limit=5)
+        await canal.send(embed=embed_painel_ausencia(), view=AusenciaView())
+    await ctx.send("✅ Painel de ausência repostado.", delete_after=5)
 
 # ============================
 #   EMOJIS DAS MENSAGENS EPHEMERAL
@@ -1431,7 +1511,8 @@ class DecisaoInscricao(Button):
         self.codigo = codigo
         self.aprovado = aprovado
         acao = "aprovar" if aprovado else "reprovar"
-        super().__init__(label=f"<:CRACHA2:1540808930572243004> Aprovar" if aprovado else f"<:CRACHA3:1540809884424208394> Reprovar", style=discord.ButtonStyle.secondary if aprovado else discord.ButtonStyle.secondary, custom_id=f"insc_{acao}:{codigo}")
+        super().__init__(
+            label=f"Aprovar" if aprovado else f"Reprovar", style=discord.ButtonStyle.secondary if aprovado else discord.ButtonStyle.secondary, custom_id=f"insc_{acao}:{codigo}")
 
     async def callback(self, interaction: discord.Interaction):
         if not has_authorized_role(interaction.user):
@@ -1569,6 +1650,7 @@ async def on_ready():
     bot.add_view(ConfirmarOuFecharView())
     bot.add_view(PainelAdminView())
     bot.add_view(ViewInscricao())
+    bot.add_view(AusenciaView())
     bot.add_view(PainelCursosView())
     with cursos_conn() as conn:
         cursos_salvos = conn.execute("SELECT id, status FROM cursos").fetchall()
@@ -1597,6 +1679,14 @@ async def on_ready():
         return
 
     print(f"<:YES:1540777802935181444> Guild encontrada: {guild.name}")
+
+    canal_ausencia = bot.get_channel(CANAL_AUSENCIA_ID)
+    if canal_ausencia:
+        try:
+            await canal_ausencia.purge(limit=5)
+            await canal_ausencia.send(embed=embed_painel_ausencia(), view=AusenciaView())
+        except discord.HTTPException as erro:
+            print(f"Erro ao enviar painel de ausência: {erro}")
 
     canal_cursos = bot.get_channel(CANAL_PAINEL_CURSOS)
     if canal_cursos:
