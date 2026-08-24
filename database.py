@@ -282,6 +282,23 @@ def historico_advertencias(user_id: int) -> list[dict]:
         conn.close()
 
 
+def remover_ultima_advertencia(user_id: int) -> dict | None:
+    conn = _get_conn()
+    try:
+        row = conn.execute(
+            "SELECT * FROM advertencias WHERE user_id = ? ORDER BY criado_em DESC, id DESC LIMIT 1",
+            (user_id,),
+        ).fetchone()
+        if not row:
+            return None
+        registro = dict(row)
+        conn.execute("DELETE FROM advertencias WHERE id = ?", (registro["id"],))
+        conn.commit()
+        return registro
+    finally:
+        conn.close()
+
+
 # ---------------------------------------------------------------------------
 # WRAPPERS ASSÍNCRONOS
 # Use estes dentro do bot.py — eles rodam a chamada síncrona numa thread
@@ -322,3 +339,7 @@ async def a_aplicar_advertencia(*args, **kwargs) -> None:
 
 async def a_historico_advertencias(user_id: int) -> list[dict]:
     return await asyncio.to_thread(historico_advertencias, user_id)
+
+
+async def a_remover_ultima_advertencia(user_id: int) -> dict | None:
+    return await asyncio.to_thread(remover_ultima_advertencia, user_id)

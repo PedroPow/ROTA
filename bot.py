@@ -754,8 +754,13 @@ async def mensagem(interaction: discord.Interaction):
 # ============================
 #      SISTEMA DE ADVs
 # ============================
-@bot.tree.command(name="advertencia", description="Aplica advertência. (apenas VUNESP)")
-async def adv(interaction: discord.Interaction, membro: discord.Member, motivo: str):
+@bot.tree.command(name="advertencia", description="Adiciona ou remove uma advertência. (apenas VUNESP)")
+@app_commands.describe(membro="Membro", motivo="Motivo da advertência (obrigatório ao adicionar)", acao="Adicionar ou remover")
+@app_commands.choices(acao=[
+    app_commands.Choice(name="Adicionar", value="adicionar"),
+    app_commands.Choice(name="Remover", value="remover"),
+])
+async def adv(interaction: discord.Interaction, membro: discord.Member, acao: app_commands.Choice[str], motivo: str = ""):
     if not await require_role(interaction, 1469854597802754058, "VUNESP"):
         return
 
@@ -773,6 +778,25 @@ async def adv(interaction: discord.Interaction, membro: discord.Member, motivo: 
     adv2 = interaction.guild.get_role(ID_CARGO_ADV2)
     adv3 = interaction.guild.get_role(ID_CARGO_ADV3)
     afastado = interaction.guild.get_role(ID_CARGO_AFASTADO)
+
+    if acao.value == "remover":
+        historico = await db.a_historico_advertencias(membro.id)
+        if not historico:
+            return await interaction.followup.send(embed=embed_ephemeral("Esse membro não possui advertências registradas.", "aviso"), ephemeral=True)
+        ultima = await db.a_remover_ultima_advertencia(membro.id)
+        nivel_removido = ultima["nivel"] if ultima else -1
+        cargo_por_nivel = {0: adv1, 1: adv2, 2: adv3, 3: afastado}
+        cargo = cargo_por_nivel.get(nivel_removido)
+        if cargo and cargo in membro.roles:
+            await membro.remove_roles(cargo)
+        cargo_restaurado = {1: adv1, 2: adv2, 3: adv3}.get(nivel_removido)
+        if cargo_restaurado:
+            await membro.add_roles(cargo_restaurado)
+        await interaction.followup.send(embed=embed_ephemeral(f"Última advertência de {membro.mention} removida.", "sucesso"), ephemeral=True)
+        return
+
+    if not motivo.strip():
+        return await interaction.followup.send(embed=embed_ephemeral("Informe o motivo ao adicionar uma advertência.", "erro"), ephemeral=True)
 
     if afastado in membro.roles:
         return await interaction.followup.send(embed=embed_ephemeral("Esse membro já está afastado.", "aviso"), ephemeral=True)
@@ -835,28 +859,48 @@ async def adv(interaction: discord.Interaction, membro: discord.Member, motivo: 
 # ============================
 #            BAN
 # ============================
-@bot.tree.command(name="banimento", description="Bane um membro. (apenas VUNESP)")
-async def ban(interaction: discord.Interaction, membro: discord.Member, motivo: str):
+@bot.tree.command(name="banimento", description="Adiciona ou remove um banimento. (apenas VUNESP)")
+@app_commands.describe(membro="Usuário", motivo="Motivo (obrigatório ao adicionar)", acao="Adicionar ou remover")
+@app_commands.choices(acao=[
+    app_commands.Choice(name="Adicionar", value="adicionar"),
+    app_commands.Choice(name="Remover", value="remover"),
+])
+async def ban(interaction: discord.Interaction, membro: discord.Member, acao: app_commands.Choice[str], motivo: str = ""):
     if not await require_role(interaction, 1469854597802754058, "VUNESP"):
         return
 
     if not interaction.user.guild_permissions.ban_members:
         return await interaction.response.send_message(
-            embed=embed_ephemeral("Você precisa da permissão de banir.", "erro"), ephemeral=True
+            embed=embed_ephemeral("Você precisa da permissão de banir para usar este comando.", "erro"), ephemeral=True
         )
 
     await interaction.response.defer(ephemeral=True)
 
-    try:
-        await membro.ban(reason=motivo)
-        await interaction.followup.send(embed=embed_ephemeral(f"{membro.mention} Afastado!", "sucesso"), ephemeral=True)
-    except discord.Forbidden:
-        return await interaction.followup.send(
-            embed=embed_ephemeral("O bot não pode banir esse usuário.", "erro"), ephemeral=True
-        )
+    if acao.value == "adicionar" and not motivo.strip():
+        return await interaction.followup.send(embed=embed_ephemeral("Informe o motivo ao adicionar um banimento.", "erro"), ephemeral=True)
 
+    cargo_banimento = interaction.guild.get_role(ID_CARGO_AFASTADO)
+    if not cargo_banimento:
+        return await interaction.followup.send(embed=embed_ephemeral("O cargo de banimento não foi encontrado.", "erro"), ephemeral=True)
+
+    try:
+        if acao.value == "adicionar":
+            if cargo_banimento in membro.roles:
+                return await interaction.followup.send(embed=embed_ephemeral("Esse membro já possui o cargo de banimento.", "aviso"), ephemeral=True)
+            await membro.add_roles(cargo_banimento, reason=motivo)
+            mensagem = f"{membro.mention} recebeu o cargo de banimento e permanecerá no servidor."
+        else:
+            if cargo_banimento not in membro.roles:
+                return await interaction.followup.send(embed=embed_ephemeral("Esse membro não possui o cargo de banimento.", "aviso"), ephemeral=True)
+            await membro.remove_roles(cargo_banimento, reason=motivo or "Remoção do banimento")
+            mensagem = f"O cargo de banimento foi removido de {membro.mention}."
+        await interaction.followup.send(embed=embed_ephemeral(mensagem, "sucesso"), ephemeral=True)
+    except discord.Forbidden:
+        return await interaction.followup.send(embed=embed_ephemeral("O bot não tem permissão para adicionar ou remover esse cargo.", "erro"), ephemeral=True)
+
+    titulo_acao = "Membro Banido" if acao.value == "adicionar" else "Banimento Removido"
     embed = discord.Embed(
-        title=f"<:paineladmin:1540780905902374982> **Membro Afastado**",
+        title=f"<:paineladmin:1540780905902374982> **{titulo_acao}**",
         description=
         f"<:CRACHA3:1540809884424208394> **Membro:**\n" 
         f"> {membro.mention}\n\n"
@@ -875,7 +919,7 @@ async def ban(interaction: discord.Interaction, membro: discord.Member, motivo: 
 
     embed.set_footer(icon_url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8b4418&is=6a89f298&hm=ccef0422a39e4382dc5e5b9858c859cb3a0dd81a22eac8f643b85ee6fa955c8f&", text="Batalhão 9° BPM/M Virtual® Todos direitos reservados.")
 
-    await enviar_log_canal(interaction.guild, LOG_CHANNEL_BAN, embed, contexto="/ban")
+    await enviar_log_canal(interaction.guild, LOG_CHANNEL_BAN, embed, contexto="/banimento")
 
 
 # ================= CONFIG ROTA =================
