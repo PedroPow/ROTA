@@ -10,9 +10,12 @@ import os
 import json
 import random
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from dotenv import load_dotenv
 
 import database as db
+
+load_dotenv()
 
 # ============================
 #   CONFIGURAÇÕES DO SERVIDOR
@@ -91,6 +94,24 @@ ROLE_P1_ID = 1449998328334123208
 CANAL_AUSENCIA_ID = 1449997864255357091
 LOG_AUSENCIA_ID = 1449997591713677362
 IMAGEM_AUSENCIA_URL = "https://cdn.discordapp.com/attachments/1444735189765849320/1541258863842427031/9_bpm_INSCRICOES_1.png?ex=6a8cf0ac&is=6a8b9f2c&hm=383831dac53fba8a329ad50147a4f85ab2806425e3f539750ffa8814196585fa&"
+
+# ==========================
+#       SISTEMA DE BOLETIM
+# ==========================
+ID_CANAL_BOLETIM = 1449997658935525457
+ID_CATEGORIA_TICKETS_BOLETIM = 1475279716293283861
+ID_CARGO_GERAL_BOLETIM = 1449985109116715008
+ID_CARGO_VUNESP_BOLETIM = 1541511597577601136
+ID_CARGO_P1_BOLETIM = 1449998328334123208
+CANAL_BOLETINS = {
+    "9°BPM": 1450996140043538573,
+}
+CARGOS_AUTORIZADOS_BOLETIM = {
+    ID_CARGO_VUNESP_BOLETIM: "VUNESP",
+    ID_CARGO_P1_BOLETIM: "P/1",
+    ID_CARGO_GERAL_BOLETIM: "Geral",
+}
+RASCUNHO_EXPIRACAO_HORAS = 24
 
 
 
@@ -1406,6 +1427,228 @@ async def buscar_funcional(interaction: discord.Interaction, codigo: str):
     await interaction.followup.send(embed=embed, ephemeral=True)
 
 
+# ================= BOLETINS =================
+
+rascunhos_boletim: dict[int, dict] = {}
+
+
+def salvar_rascunho_boletim(user_id: int, companhia: str, partes: list[str]) -> None:
+    rascunhos_boletim[user_id] = {
+        "companhia": companhia,
+        "partes": partes,
+        "expira_em": datetime.now() + timedelta(hours=RASCUNHO_EXPIRACAO_HORAS),
+    }
+
+
+def obter_rascunho_boletim(user_id: int) -> dict | None:
+    rascunho = rascunhos_boletim.get(user_id)
+    if rascunho and datetime.now() < rascunho["expira_em"]:
+        return rascunho
+    rascunhos_boletim.pop(user_id, None)
+    return None
+
+
+def limpar_rascunho_boletim(user_id: int) -> None:
+    rascunhos_boletim.pop(user_id, None)
+
+
+async def tarefa_limpeza_boletim() -> None:
+    await bot.wait_until_ready()
+    while not bot.is_closed():
+        agora = datetime.now()
+        expirados = [
+            user_id
+            for user_id, rascunho in rascunhos_boletim.items()
+            if agora >= rascunho["expira_em"]
+        ]
+        for user_id in expirados:
+            rascunhos_boletim.pop(user_id, None)
+        await asyncio.sleep(600)
+
+
+def embed_sistema_boletim(descricao: str, titulo: str | None = None) -> discord.Embed:
+    embed = discord.Embed(description=descricao, color=discord.Color.yellow())
+    if titulo:
+        embed.title = titulo
+    return embed
+
+
+def montar_embed_boletim(companhia: str, membro: discord.Member, respostas: list[tuple[str, str]]) -> discord.Embed:
+    embed = discord.Embed(title=f"BOLETIM INTERNO | {companhia}", color=discord.Color.yellow())
+    for titulo, resposta in respostas:
+        embed.add_field(name=titulo, value=f"```{resposta or '_Não informado_'}```", inline=False)
+    embed.add_field(name="<:CERTIFICADO:1540945192150896740> Assina:", value=membro.mention, inline=False)
+    embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8c9598&is=6a8b4418&hm=0b9faa95c5cc5c9231eb5090e3ba60d87bbcf067a833b9fe9c655d32bc737a87&")
+    embed.set_image(url="https://cdn.discordapp.com/attachments/1444735189765849320/1541312924428279859/9_bpm_INSCRICOES_2.png?ex=6a8dcbc5&is=6a8c7a45&hm=c3ec6969dec0b908af952d11a6d8dedcd88ff77985cf90db284c2a0c3062163b&")
+    embed.set_footer(text="Batalhão 9° BPM/M Virtual® Todos direitos reservados", icon_url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8c9598&is=6a8b4418&hm=0b9faa95c5cc5c9231eb5090e3ba60d87bbcf067a833b9fe9c655d32bc737a87&")
+    return embed
+
+
+class BoletimModal(Modal, title="Boletim Interno"):
+    def __init__(self, companhia: str, rascunho: list[str] | None = None):
+        super().__init__()
+        self.companhia = companhia
+        partes = rascunho or ["", "", "", ""]
+        campos = [
+            ("🪪 1° PARTE — Serviços Diários", "Descreva os serviços diários..."),
+            ("📁 2° PARTE — Instrução e Operações", "Descreva instruções e operações policiais..."),
+            ("📆 3° PARTE — Assuntos Gerais", "Descreva assuntos gerais e administrativos..."),
+            ("📋 4° PARTE — Justiça e Disciplina", "Descreva questões de justiça e disciplina..."),
+        ]
+        self.partes = []
+        for indice, (label, placeholder) in enumerate(campos):
+            campo = TextInput(
+                label=label,
+                style=discord.TextStyle.paragraph,
+                placeholder=placeholder,
+                default=partes[indice],
+                max_length=1024,
+            )
+            self.partes.append(campo)
+            self.add_item(campo)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        respostas = [campo.value for campo in self.partes]
+        salvar_rascunho_boletim(interaction.user.id, self.companhia, respostas)
+        embed_boletim = montar_embed_boletim(
+            self.companhia,
+            interaction.user,
+            [
+                ("🪪 1° PARTE — Serviços Diários", respostas[0]),
+                ("📁 2° PARTE — Instrução e Operações", respostas[1]),
+                ("📆 3° PARTE — Assuntos Gerais", respostas[2]),
+                ("📋 4° PARTE — Justiça e Disciplina", respostas[3]),
+            ],
+        )
+        await interaction.response.send_message(
+            embeds=[
+                embed_sistema_boletim(
+                    "Revise as informações abaixo e confirme o envio.",
+                    "<:PRANCHETA:1541310906334449734> Prévia do seu Boletim",
+                ),
+                embed_boletim,
+            ],
+            view=PreviewBoletimView(embed_boletim, self.companhia),
+            ephemeral=True,
+        )
+
+
+class PreviewBoletimView(View):
+    def __init__(self, embed: discord.Embed, companhia: str):
+        super().__init__(timeout=300)
+        self.embed = embed
+        self.companhia = companhia
+
+    @discord.ui.button(label="Confirmar e Enviar", emoji=discord.PartialEmoji(name="baixar", id=1540778990615273533), style=discord.ButtonStyle.secondary, custom_id="boletim_confirmar")
+    async def confirmar(self, interaction: discord.Interaction, button: Button):
+        canal_id = CANAL_BOLETINS.get(self.companhia)
+        canal = interaction.guild.get_channel(canal_id) if interaction.guild and canal_id else None
+        if not canal:
+            await interaction.response.edit_message(embed=embed_sistema_boletim("❌ Canal de destino não encontrado. Contate um administrador."), view=None)
+            return
+        await canal.send(embed=self.embed)
+        limpar_rascunho_boletim(interaction.user.id)
+        await interaction.response.edit_message(embed=embed_sistema_boletim(f"<:PASTA:1541310811522203768> Boletim enviado com sucesso para {canal.mention}!"), view=None)
+
+    @discord.ui.button(label="Editar Boletim", emoji=discord.PartialEmoji(name="assumirticket", id=1540778869332906025), style=discord.ButtonStyle.secondary, custom_id="boletim_editar")
+    async def editar(self, interaction: discord.Interaction, button: Button):
+        rascunho = obter_rascunho_boletim(interaction.user.id)
+        await interaction.response.send_modal(BoletimModal(self.companhia, rascunho["partes"] if rascunho else None))
+
+    @discord.ui.button(label="Salvar Rascunho", emoji=discord.PartialEmoji(name="222", id=1540799996251865108), style=discord.ButtonStyle.secondary, custom_id="boletim_salvar")
+    async def salvar(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.edit_message(embed=embed_sistema_boletim(f"<:222:1540799996251865108> Rascunho salvo por **`{RASCUNHO_EXPIRACAO_HORAS} horas`**."), view=None)
+
+
+class RascunhoBoletimView(View):
+    def __init__(self, companhia: str, partes: list[str]):
+        super().__init__(timeout=60)
+        self.companhia = companhia
+        self.partes = partes
+
+    @discord.ui.button(label="Continuar rascunho", emoji=discord.PartialEmoji(name="PASTA", id=1541310811522203768), style=discord.ButtonStyle.secondary, custom_id="boletim_continuar")
+    async def continuar(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.send_modal(BoletimModal(self.companhia, self.partes))
+
+    @discord.ui.button(label="Começar do zero", emoji=discord.PartialEmoji(name="lixeira", id=1540778211074383932), style=discord.ButtonStyle.secondary, custom_id="boletim_zerar")
+    async def zerar(self, interaction: discord.Interaction, button: Button):
+        limpar_rascunho_boletim(interaction.user.id)
+        await interaction.response.send_modal(BoletimModal(self.companhia))
+
+
+class SelectCompanhiaBoletim(Select):
+    def __init__(self, companhias: list[str]):
+        super().__init__(placeholder="Selecione a companhia", options=[discord.SelectOption(label=nome, value=nome) for nome in companhias])
+
+    async def callback(self, interaction: discord.Interaction):
+        companhia = self.values[0]
+        rascunho = obter_rascunho_boletim(interaction.user.id)
+        partes = rascunho["partes"] if rascunho and rascunho["companhia"] == companhia else None
+        await interaction.response.send_modal(BoletimModal(companhia, partes))
+
+
+class SelectCompanhiaBoletimView(View):
+    def __init__(self, companhias: list[str]):
+        super().__init__(timeout=60)
+        self.add_item(SelectCompanhiaBoletim(companhias))
+
+
+class BotaoBoletim(Button):
+    def __init__(self):
+        super().__init__(label="Emitir Boletim", emoji=discord.PartialEmoji(name="BOLETIM", id=1541310958964576276), style=discord.ButtonStyle.secondary, custom_id="botao_emitir_boletim")
+
+    async def callback(self, interaction: discord.Interaction):
+        membro = interaction.user
+        if discord.utils.get(membro.roles, id=ID_CARGO_GERAL_BOLETIM):
+            companhias = list(CANAL_BOLETINS)
+        else:
+            companhias = list({CARGOS_AUTORIZADOS_BOLETIM[cargo.id] for cargo in membro.roles if cargo.id in CARGOS_AUTORIZADOS_BOLETIM})
+        if not companhias:
+            await interaction.response.send_message(embed=embed_sistema_boletim("❌ Você não tem permissão para emitir boletins."), ephemeral=True)
+            return
+        if len(companhias) == 1:
+            companhia = companhias[0]
+            rascunho = obter_rascunho_boletim(membro.id)
+            if rascunho and rascunho["companhia"] == companhia:
+                expira = rascunho["expira_em"].strftime("%H:%M de %d/%m/%Y")
+                await interaction.response.send_message(embed=embed_sistema_boletim(f"Você tem um rascunho salvo que expira às **`{expira}`**.\n\nDeseja continuar de onde parou ou começar do zero?", "<:BOLETIM:1541310958964576276> Rascunho encontrado"), view=RascunhoBoletimView(companhia, rascunho["partes"]), ephemeral=True)
+            else:
+                await interaction.response.send_modal(BoletimModal(companhia))
+        else:
+            await interaction.response.send_message(embed=embed_sistema_boletim("Selecione a companhia para emitir o boletim:"), view=SelectCompanhiaBoletimView(companhias), ephemeral=True)
+
+
+class BoletimView(View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(BotaoBoletim())
+
+
+@bot.tree.command(name="boletim", description="Envia o painel de boletim interno")
+async def boletim(interaction: discord.Interaction):
+    if not await require_role(interaction, ID_CARGO_P1_BOLETIM, f"<@&{ID_CARGO_P1_BOLETIM}>"):
+        return
+    embed = discord.Embed(
+        title="<:BOLETIM:1541310958964576276> Sistema de Boletim Interno",
+        description=(
+            "Clique no botão abaixo para iniciar um boletim.\n\n"
+            "<:111:1540791811310747759> **Observações:**\n\n"
+            "<:ponto:1540777974427553862> O boletim será salvo como rascunho até que seja enviado.\n\n"
+            "<:ponto:1540777974427553862> Você pode editar o boletim antes de enviá-lo.\n\n"
+            "<:ponto:1540777974427553862> Rascunhos ficam disponíveis por `24 horas`.\n\n"
+            "<:ponto:1540777974427553862> Apenas membros com cargos autorizados podem emitir boletins:\n\n"
+            f"(<@&{ID_CARGO_P1_BOLETIM}> / <@&{ID_CARGO_VUNESP_BOLETIM}>)\n\n"
+            f"<:ponto:1540777974427553862> O boletim será enviado para <#{CANAL_BOLETINS['9°BPM']}>.\n\n"
+            "<:ponto:1540777974427553862> Qualquer dúvida, solicite ajuda à equipe."
+        ),
+        color=discord.Color.yellow(),
+    )
+    embed.set_image(url="https://cdn.discordapp.com/attachments/1444735189765849320/1540797986068627598/9_bpm_SOLICITAR_FUNCIONAL_.png?ex=6a8b4372&is=6a89f1f2&hm=3817fcf103b86728f40bdc0b34c8836cdd3512202c519fa7714ef18122861fac&")
+    embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8c9598&is=6a8b4418&hm=0b9faa95c5cc5c9231eb5090e3ba60d87bbcf067a833b9fe9c655d32bc737a87&")
+    embed.set_footer(text="Batalhão 9° BPM/M Virtual® Todos direitos reservados", icon_url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8c9598&is=6a8b4418&hm=0b9faa95c5cc5c9231eb5090e3ba60d87bbcf067a833b9fe9c655d32bc737a87&")
+    await interaction.response.send_message(embed=embed, view=BoletimView())
+
+
 # ================= INSCRIÇÕES =================
 
 def carregar_inscricoes() -> dict:
@@ -1660,6 +1903,7 @@ async def on_ready():
     bot.add_view(ConfirmarOuFecharView())
     bot.add_view(PainelAdminView())
     bot.add_view(ViewInscricao())
+    bot.add_view(BoletimView())
     bot.add_view(AusenciaView())
     bot.add_view(PainelCursosView())
     with cursos_conn() as conn:
@@ -1689,6 +1933,39 @@ async def on_ready():
         return
 
     print(f"<:YES:1540777802935181444> Guild encontrada: {guild.name}")
+
+    if not getattr(bot, "_boletim_task", None) or bot._boletim_task.done():
+        bot._boletim_task = bot.loop.create_task(tarefa_limpeza_boletim())
+
+    # ================= PAINEL DE BOLETIM =================
+    canal_boletim = guild.get_channel(ID_CANAL_BOLETIM)
+    if canal_boletim:
+        try:
+            async for msg in canal_boletim.history(limit=50):
+                if msg.author == bot.user:
+                    await msg.delete()
+
+            painel_boletim = discord.Embed(
+                title="<:BOLETIM:1541310958964576276> Sistema de Boletim Interno",
+                description=(
+                    "Clique no botão abaixo para iniciar um boletim.\n\n"
+                    "<:111:1540791811310747759> **Observações:**\n\n"
+                    "<:ponto:1540777974427553862> O boletim será salvo como rascunho até que seja enviado.\n\n"
+                    "<:ponto:1540777974427553862> Você pode editar o boletim antes de enviá-lo.\n\n"
+                    "<:ponto:1540777974427553862> Rascunhos ficam disponíveis por `24 horas`.\n\n"
+                    "<:ponto:1540777974427553862> Apenas membros com cargos autorizados podem emitir boletins:\n\n"
+                    f"(<@&{ID_CARGO_P1_BOLETIM}> / <@&{ID_CARGO_VUNESP_BOLETIM}>)\n\n"
+                    f"<:ponto:1540777974427553862> O boletim será enviado para <#{CANAL_BOLETINS['9°BPM']}>.\n\n"
+                    "<:ponto:1540777974427553862> Qualquer dúvida, solicite ajuda à equipe."
+                ),
+                color=discord.Color.yellow(),
+            )
+            painel_boletim.set_image(url="https://cdn.discordapp.com/attachments/1444735189765849320/1540797986068627598/9_bpm_SOLICITAR_FUNCIONAL_.png?ex=6a8b4372&is=6a89f1f2&hm=3817fcf103b86728f40bdc0b34c8836cdd3512202c519fa7714ef18122861fac&")
+            painel_boletim.set_thumbnail(url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8c9598&is=6a8b4418&hm=0b9faa95c5cc5c9231eb5090e3ba60d87bbcf067a833b9fe9c655d32bc737a87&")
+            painel_boletim.set_footer(text="Batalhão 9° BPM/M Virtual® Todos direitos reservados", icon_url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8c9598&is=6a8b4418&hm=0b9faa95c5cc5c9231eb5090e3ba60d87bbcf067a833b9fe9c655d32bc737a87&")
+            await canal_boletim.send(embed=painel_boletim, view=BoletimView())
+        except discord.HTTPException as erro:
+            print(f"Erro ao enviar painel de boletim: {erro}")
 
     canal_ausencia = bot.get_channel(CANAL_AUSENCIA_ID)
     if canal_ausencia:
