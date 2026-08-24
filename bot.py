@@ -793,6 +793,23 @@ async def adv(interaction: discord.Interaction, membro: discord.Member, acao: ap
         if cargo_restaurado:
             await membro.add_roles(cargo_restaurado)
         await interaction.followup.send(embed=embed_ephemeral(f"Última advertência de {membro.mention} removida.", "sucesso"), ephemeral=True)
+
+        embed_log = discord.Embed(
+            title="<:lixeira:1540778211074383932> **Advertência removida**",
+            description=(
+                f"<:CRACHA3:1540809884424208394> **Membro:**\n> {membro.mention}\n\n"
+                f"<:CRACHA2:1540808930572243004> **Por:**\n> {interaction.user.mention}\n\n"
+                f"<:baixar:1540778990615273533> **Nível removido:**\n```{nivel_removido}/2```\n\n"
+                f"<:222:1540799996251865108> **Motivo da remoção:**\n```{motivo or 'Não informado'}```"
+            ),
+            color=discord.Color.orange(),
+        )
+        embed_log.set_thumbnail(url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8b4418&is=6a89f298&hm=ccef0422a39e4382dc5e5b9858c859cb3a0dd81a22eac8f643b85ee6fa955c8f&")
+        embed_log.set_footer(
+            text="Batalhão 9° BPM/M Virtual® Todos direitos reservados.",
+            icon_url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8b4418&is=6a89f298&hm=ccef0422a39e4382dc5e5b9858c859cb3a0dd81a22eac8f643b85ee6fa955c8f&",
+        )
+        await enviar_log_canal(interaction.guild, LOG_CHANNEL_ADV, embed_log, contexto="/advertencia remover")
         return
 
     if not motivo.strip():
@@ -840,7 +857,7 @@ async def adv(interaction: discord.Interaction, membro: discord.Member, acao: ap
         f"> {interaction.user.mention}\n\n"
 
         f"<:baixar:1540778990615273533> Advertências aplicadas:\n" 
-        f"```**{nivel}/2**```\n\n"
+        f"```{nivel}/2```\n\n"
 
         f"<:222:1540799996251865108> **Motivo:**\n" 
         f"```{motivo}```",
@@ -909,7 +926,7 @@ async def ban(interaction: discord.Interaction, membro: discord.Member, acao: ap
         f"> {interaction.user.mention}\n\n"
 
         f"<:222:1540799996251865108> **Motivo:**\n" 
-        f"> {motivo}",
+        f"```{motivo}```",
         color=discord.Color.yellow(),
     )
 
