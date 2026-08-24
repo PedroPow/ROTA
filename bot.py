@@ -357,17 +357,6 @@ class AusenciaView(View):
         await interaction.response.send_modal(AusenciaModal())
 
 
-@bot.command(name="painel_ausencia")
-async def painel_ausencia(ctx: commands.Context):
-    if not isinstance(ctx.author, discord.Member) or not any(role.id == ROLE_VUNESP_ID for role in ctx.author.roles):
-        await ctx.send(embed=embed_feedback("Erro", f"Você precisa do cargo <@&{ROLE_VUNESP_ID}> para usar este comando."), delete_after=5)
-        return
-    canal = bot.get_channel(CANAL_AUSENCIA_ID)
-    if canal:
-        await canal.purge(limit=5)
-        await canal.send(embed=embed_painel_ausencia(), view=AusenciaView())
-    await ctx.send("✅ Painel de ausência repostado.", delete_after=5)
-
 # ============================
 #   EMOJIS DAS MENSAGENS EPHEMERAL
 # ============================
@@ -394,6 +383,18 @@ intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 TOKEN = os.getenv("TOKEN_ROTA")  # Token do bot (variável de ambiente)
+
+
+@bot.command(name="painel_ausencia")
+async def painel_ausencia(ctx: commands.Context):
+    if not isinstance(ctx.author, discord.Member) or not any(role.id == ROLE_VUNESP_ID for role in ctx.author.roles):
+        await ctx.send(embed=embed_feedback("Erro", f"Você precisa do cargo <@&{ROLE_VUNESP_ID}> para usar este comando."), delete_after=5)
+        return
+    canal = bot.get_channel(CANAL_AUSENCIA_ID)
+    if canal:
+        await canal.purge(limit=5)
+        await canal.send(embed=embed_painel_ausencia(), view=AusenciaView())
+    await ctx.send("✅ Painel de ausência repostado.", delete_after=5)
 
 # guard para não reenviar painel/verify e não re-sincronizar comandos em reconexões
 bot._ready_sent = False
