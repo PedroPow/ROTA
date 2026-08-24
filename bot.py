@@ -1396,8 +1396,8 @@ class InscricaoModal(Modal, title="Ficha de Inscrição - PM"):
             color=discord.Color.from_rgb(255, 204, 0),
         )
         embed.add_field(name="<:pessoas:1540780605237760050> Nome In-Game:", value=f"**```{self.nome.value}```**", inline=False)
-        embed.add_field(name="<:hora:1540778295115780136> Idade In-Narnia:", value=f"**```{self.idade.value}```**", inline=False)
-        embed.add_field(name="<:111:1540791811310747759> Identificação (ID):", value=f"**```{self.identificacao.value}```**", inline=False)
+        embed.add_field(name="<:hora:1540778295115780136> Idade In-Narnia:", value=f"**```{self.idade.value}```**", inline=True)
+        embed.add_field(name="<:111:1540791811310747759> Identificação (ID):", value=f"**```{self.identificacao.value}```**", inline=True)
         embed.add_field(name="<:222:1540799996251865108> Experiência Operacional:", value=f"**```{self.experiencia.value}```**", inline=False)
         embed.add_field(name="<:CRACHA:1540808611436167208> Solicitante:", value=interaction.user.mention, inline=False)
         embed.set_image(url="https://cdn.discordapp.com/attachments/1444735189765849320/1541186562304249916/9_bpm_INSCRICOES_.png?ex=6a8cad56&is=6a8b5bd6&hm=b009c2fe3f7f4f62cce3091b34e7249e6149a7befef88837528e7b822d6ec3b1&")
