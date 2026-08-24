@@ -1222,17 +1222,35 @@ class DecisaoInscricao(Button):
 
         if membro:
             try:
-                texto = (
-                    f"Sua inscrição **`{self.codigo}`** foi **aprovada**!\n"
-                    "Você recebeu o cargo **Sem Set**. Acesse o canal de funcional para continuar."
-                    if self.aprovado else
-                    f"Sua inscrição **`{self.codigo}`** foi **reprovada**.\nAguarde futuros processos seletivos."
+                if self.aprovado:
+                    dm_embed = discord.Embed(
+                        title="<:CRACHA2:1540808930572243004> Parabéns! Inscrição Aprovada!",
+                        description=(
+                            f"Sua inscrição **`{self.codigo}`** foi **aprovada**!\n"
+                            "Bem-vindo ao Batalhão. Você recebeu o cargo **Sem Set**.\n\n"
+                            "Para dar continuidade ao processo seletivo, acesse o canal "
+                            "<#1343398652349255758> e siga as instruções fornecidas.\n\n"
+                        ),
+                        color=discord.Color.from_rgb(255, 204, 0),
+                    )
+                else:
+                    dm_embed = discord.Embed(
+                        title="<:CRACHA3:1540809884424208394> Inscrição Reprovada",
+                        description=(
+                            f"Sua inscrição **`{self.codigo}`** foi **reprovada**.\n"
+                            "Aguarde futuros processos seletivos.\n"
+                        ),
+                        color=discord.Color.from_rgb(255, 204, 0),
+                    )
+
+                dm_embed.set_footer(
+                    text="Batalhão 9° BPM/M Virtual® Todos os direitos reservados.",
+                    icon_url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8c9598&is=6a8b4418&hm=0b9faa95c5cc5c9231eb5090e3ba60d87bbcf067a833b9fe9c655d32bc737a87&",
                 )
-                await membro.send(embed=discord.Embed(
-                    title="<:CRACHA2:1540808930572243004> Inscrição Aprovada" if self.aprovado else "<:CRACHA3:1540809884424208394> Inscrição Reprovada",
-                    description=texto,
-                    color=discord.Color.green() if self.aprovado else discord.Color.red(),
-                ))
+                dm_embed.set_thumbnail(
+                    url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8c9598&is=6a8b4418&hm=0b9faa95c5cc5c9231eb5090e3ba60d87bbcf067a833b9fe9c655d32bc737a87&"
+                )
+                await membro.send(embed=dm_embed)
             except discord.HTTPException:
                 pass
 
