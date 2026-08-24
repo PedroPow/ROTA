@@ -1126,22 +1126,22 @@ class DadosPessoaisModal(Modal, title="Registro do Policial"):
         )
         embed.add_field(
             name="<:pessoas:1540780605237760050> Nome:",
-            value=f"`{nome}`",
+            value=f"```{nome}```",
             inline=True,
         )
         embed.add_field(
             name="<:111:1540791811310747759> Identificação:",
-            value=f"`{passaporte}`",
+            value=f"```{passaporte}```",
             inline=True,
         )
         embed.add_field(
             name="<:222:1540799996251865108> Companhia:",
-            value=f"`{self.cia}`",
-            inline=True,
+            value=f"```{self.cia}```",
+            inline=False,
         )
         embed.add_field(
             name="<:paineladmin:1540780905902374982> Patente:",
-            value=f"`{self.patente_nome}`",
+            value=f"```{self.patente_nome}```",
             inline=True,
         )
         embed.add_field(
