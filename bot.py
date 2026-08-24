@@ -55,6 +55,8 @@ ID_CARGO_AFASTADO = 1343645850294947860
 CARGOS_AUTORIZADOS = [
     1469854597802754058,  # VUNESP
 ]
+ROLE_INSTRUTOR_ID = 1343646363006668911
+ROLE_ADMIN_FUNCIONAL_ID = 1449998328334123208
 
 # ============================
 #         SISTEMA DE CURSOS
@@ -408,6 +410,17 @@ async def require_authorized(interaction: discord.Interaction) -> bool:
     return True
 
 
+async def require_role(interaction: discord.Interaction, role_id: int, nome_cargo: str) -> bool:
+    membro = interaction.user
+    if not isinstance(membro, discord.Member) or not any(role.id == role_id for role in membro.roles):
+        await interaction.response.send_message(
+            embed=embed_ephemeral(f"Você precisa do cargo **{nome_cargo}** para usar este comando.", "erro"),
+            ephemeral=True,
+        )
+        return False
+    return True
+
+
 # ============================
 #     PAINEL ADMINISTRATIVO
 # ============================
@@ -468,7 +481,7 @@ async def enviar_painel(guild: discord.Guild):
 # ============================
 @bot.tree.command(name="clearall", description="Apaga todas as mensagens do canal atual.")
 async def clearall(interaction: discord.Interaction):
-    if not await require_authorized(interaction):
+    if not await require_role(interaction, 1469854597802754058, "VUNESP"):
         return
 
     canal = interaction.channel
@@ -618,9 +631,9 @@ class MensagemModal(Modal, title="📢 Enviar Mensagem"):
                 pass
 
 
-@bot.tree.command(name="mensagem", description="Enviar mensagem como o bot.")
+@bot.tree.command(name="mensagem", description="Enviar mensagem como o bot. (apenas VUNESP)")
 async def mensagem(interaction: discord.Interaction):
-    if not await require_authorized(interaction):
+    if not await require_role(interaction, 1469854597802754058, "VUNESP"):
         return
     await interaction.response.send_modal(MensagemModal())
 
@@ -628,9 +641,9 @@ async def mensagem(interaction: discord.Interaction):
 # ============================
 #      SISTEMA DE ADVs
 # ============================
-@bot.tree.command(name="adv", description="Aplica advertência.")
+@bot.tree.command(name="advertencia", description="Aplica advertência. (apenas VUNESP)")
 async def adv(interaction: discord.Interaction, membro: discord.Member, motivo: str):
-    if not await require_authorized(interaction):
+    if not await require_role(interaction, 1469854597802754058, "VUNESP"):
         return
 
     if not interaction.user.guild_permissions.kick_members:
@@ -709,9 +722,9 @@ async def adv(interaction: discord.Interaction, membro: discord.Member, motivo: 
 # ============================
 #            BAN
 # ============================
-@bot.tree.command(name="ban", description="Bane um membro.")
+@bot.tree.command(name="banimento", description="Bane um membro. (apenas VUNESP)")
 async def ban(interaction: discord.Interaction, membro: discord.Member, motivo: str):
-    if not await require_authorized(interaction):
+    if not await require_role(interaction, 1469854597802754058, "VUNESP"):
         return
 
     if not interaction.user.guild_permissions.ban_members:
@@ -1255,10 +1268,10 @@ class ConfirmarOuFecharView(View):
 
 @bot.tree.command(
     name="buscar-funcional",
-    description="Consulta uma solicitação de funcional pelo código (ex: FT-8K2P4X).",
+    description="Consulta uma solicitação de funcional pelo código (ex: FT-8K2P4X). (apenas P/1)",
 )
 async def buscar_funcional(interaction: discord.Interaction, codigo: str):
-    if not await require_authorized(interaction):
+    if not await require_role(interaction, ROLE_ADMIN_FUNCIONAL_ID, "P/1"):
         return
 
     await interaction.response.defer(ephemeral=True)
@@ -1490,8 +1503,10 @@ class ViewDecisaoInscricao(View):
         self.add_item(DecisaoInscricao(codigo, False))
 
 
-@bot.tree.command(name="inscricao", description="Abre o painel de inscrições.")
+@bot.tree.command(name="inscricao", description="Abre o painel de inscrições do concurso. (Apenas Instrutores)")
 async def inscricao(interaction: discord.Interaction):
+    if not await require_role(interaction, ROLE_INSTRUTOR_ID, "Instrutor"):
+        return
     embed = discord.Embed(
         title="<:Logo_PMESP:1541187750932389908> Concurso Batalhão 9° BPM/M Virtual®",
         description=(
@@ -1514,11 +1529,11 @@ async def inscricao(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=ViewInscricao())
 
 
-@bot.tree.command(name="blacklist_inscricao", description="Adiciona ou remove um membro da blacklist.")
+@bot.tree.command(name="blacklist-inscricao", description="Adiciona ou remove um membro da blacklist. (Apenas Instrutores)")
 @app_commands.describe(membro="Membro da blacklist", acao="Adicionar ou remover")
 @app_commands.choices(acao=[app_commands.Choice(name="Adicionar", value="adicionar"), app_commands.Choice(name="Remover", value="remover")])
 async def blacklist_inscricao(interaction: discord.Interaction, membro: discord.Member, acao: app_commands.Choice[str]):
-    if not await require_authorized(interaction):
+    if not await require_role(interaction, ROLE_INSTRUTOR_ID, "Instrutor"):
         return
     dados = carregar_inscricoes()
     blacklist = dados.setdefault("blacklist", {})
