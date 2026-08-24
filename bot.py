@@ -1271,7 +1271,7 @@ class ConfirmarOuFecharView(View):
 
         embed = interaction.message.embeds[0]
         embed.color = discord.Color.green()
-        embed.description += f"\n\n<:CRACHA2:1540808930572243004> **Aprovado por:** {interaction.user.mention}"
+        embed.description = (embed.description or "") + f"\n\n<:CRACHA2:1540808930572243004> **Aprovado por:** {interaction.user.mention}"
         await interaction.message.edit(embed=embed, view=None)
 
         await interaction.followup.send(embed=embed_status_credencial(aprovado=True), ephemeral=True)
@@ -1330,7 +1330,7 @@ class ConfirmarOuFecharView(View):
 
         embed = interaction.message.embeds[0]
         embed.color = discord.Color.red()
-        embed.description += f"\n\n<:CRACHA3:1540809884424208394> **Recusado por:** {interaction.user.mention}"
+        embed.description = (embed.description or "") + f"\n\n<:CRACHA3:1540809884424208394> **Recusado por:** {interaction.user.mention}"
         await interaction.message.edit(embed=embed, view=None)
 
         await interaction.followup.send(embed=embed_status_credencial(aprovado=False), ephemeral=True)
