@@ -2049,7 +2049,7 @@ async def on_ready():
                     "<:ponto:1540777974427553862> Você pode editar o boletim antes de enviá-lo.\n\n"
                     "<:ponto:1540777974427553862> Rascunhos ficam disponíveis por `24 horas`.\n\n"
                     "<:ponto:1540777974427553862> Apenas membros com cargos autorizados podem emitir boletins:\n\n"
-                    f"(<@&{ID_CARGO_P1_BOLETIM}> / <@&{ID_CARGO_VUNESP_BOLETIM}>)\n\n"
+                    f"<@&{ID_CARGO_P1_BOLETIM}>\n\n"
                     f"<:ponto:1540777974427553862> O boletim será enviado para <#{CANAL_BOLETINS['9°BPM']}>.\n\n"
                     "<:ponto:1540777974427553862> Qualquer dúvida, solicite ajuda à equipe."
                 ),
