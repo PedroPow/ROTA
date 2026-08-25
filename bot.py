@@ -1982,7 +1982,7 @@ async def comandos(interaction: discord.Interaction):
             value=f"**Função:** {finalidade}\n**Cargo autorizado:** {cargo}",
             inline=False,
         )
-    embed.set_image(url="https://cdn.discordapp.com/attachments/1444735189765849320/1540797986068627598/9_bpm_SOLICITAR_FUNCIONAL_.png?ex=6a8b4372&is=6a89f1f2&hm=3817fcf103b86728f40bdc0b34c8836cdd3512202c519fa7714ef18122861fac&")
+    embed.set_image(url="https://cdn.discordapp.com/attachments/1444735189765849320/1541631607457189958/9_bpm_COMANDOS.png?ex=6a8e4bd1&is=6a8cfa51&hm=8b17544ee60132ce685bc14c23d5a5031edbb08fff7f919752d725e2654c9252&")
     estilo_curso(embed)
     await interaction.response.send_message(embed=embed)
 
