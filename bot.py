@@ -780,18 +780,24 @@ async def adv(interaction: discord.Interaction, membro: discord.Member, acao: ap
     afastado = interaction.guild.get_role(ID_CARGO_AFASTADO)
 
     if acao.value == "remover":
-        historico = await db.a_historico_advertencias(membro.id)
-        if not historico:
+        cargos_advertencia = (adv1, adv2, adv3, afastado)
+        cargo_atual = next((cargo for cargo in cargos_advertencia if cargo and cargo in membro.roles), None)
+        if cargo_atual is None:
             return await interaction.followup.send(embed=embed_ephemeral("Esse membro não possui advertências registradas.", "aviso"), ephemeral=True)
+
         ultima = await db.a_remover_ultima_advertencia(membro.id)
-        nivel_removido = ultima["nivel"] if ultima else -1
-        cargo_por_nivel = {0: adv1, 1: adv2, 2: adv3, 3: afastado}
-        cargo = cargo_por_nivel.get(nivel_removido)
-        if cargo and cargo in membro.roles:
-            await membro.remove_roles(cargo)
-        cargo_restaurado = {1: adv1, 2: adv2, 3: adv3}.get(nivel_removido)
-        if cargo_restaurado:
-            await membro.add_roles(cargo_restaurado)
+        if ultima is None:
+            return await interaction.followup.send(embed=embed_ephemeral("Esse membro não possui advertências registradas.", "aviso"), ephemeral=True)
+
+        nivel_removido = ultima["nivel"]
+        await membro.remove_roles(cargo_atual)
+        cargo_anterior = {
+            adv2: adv1,
+            adv3: adv2,
+            afastado: adv3,
+        }.get(cargo_atual)
+        if cargo_anterior:
+            await membro.add_roles(cargo_anterior)
         await interaction.followup.send(embed=embed_ephemeral(f"Última advertência de {membro.mention} removida.", "sucesso"), ephemeral=True)
 
         embed_log = discord.Embed(
