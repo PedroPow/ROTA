@@ -1957,6 +1957,36 @@ async def blacklist_inscricao(interaction: discord.Interaction, membro: discord.
     await interaction.response.send_message(embed=embed_ephemeral(mensagem, "sucesso"), ephemeral=True)
 
 
+# ================= COMANDOS =================
+@bot.tree.command(name="comandos", description="Lista os comandos do bot e os cargos autorizados")
+async def comandos(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="<:paineladmin:1540780905902374982> Comandos do Bot",
+        description="Confira abaixo os comandos disponíveis, suas funções e os cargos autorizados a utilizá-los.",
+        color=discord.Color.yellow(),
+    )
+    comandos_lista = [
+        ("/comandos", "Exibe esta lista de comandos.", "Todos os membros"),
+        ("/clearall", "Apaga todas as mensagens do canal atual.", f"<@&{ROLE_VUNESP_ID}>"),
+        ("/mensagem", "Envia uma mensagem como o bot, com suporte a anexos.", f"<@&{ROLE_VUNESP_ID}>"),
+        ("/advertencia", "Adiciona ou remove uma advertência de um membro.", f"<@&{ROLE_VUNESP_ID}>"),
+        ("/banimento", "Adiciona ou remove o cargo de banimento de um membro.", f"<@&{ROLE_VUNESP_ID}>"),
+        ("/buscar-funcional", "Consulta uma solicitação de funcional pelo código.", f"<@&{ROLE_ADMIN_FUNCIONAL_ID}>"),
+        ("/boletim", "Abre o painel para emissão de boletim interno.", f"<@&{ID_CARGO_P1_BOLETIM}>"),
+        ("/inscricao", "Publica o painel de inscrições do concurso.", f"<@&{ROLE_INSTRUTOR_ID}>"),
+        ("/blacklist-inscricao", "Adiciona ou remove um membro da blacklist de inscrições.", f"<@&{ROLE_INSTRUTOR_ID}>"),
+    ]
+    for nome, finalidade, cargo in comandos_lista:
+        embed.add_field(
+            name=nome,
+            value=f"**Função:** {finalidade}\n**Cargo autorizado:** {cargo}",
+            inline=False,
+        )
+    embed.set_image(url="https://cdn.discordapp.com/attachments/1444735189765849320/1540797986068627598/9_bpm_SOLICITAR_FUNCIONAL_.png?ex=6a8b4372&is=6a89f1f2&hm=3817fcf103b86728f40bdc0b34c8836cdd3512202c519fa7714ef18122861fac&")
+    estilo_curso(embed)
+    await interaction.response.send_message(embed=embed)
+
+
 # ================= READY =================
 
 @bot.event
