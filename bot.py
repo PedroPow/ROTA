@@ -2050,7 +2050,8 @@ async def on_ready():
                     "<:ponto:1540777974427553862> Rascunhos ficam disponíveis por `24 horas`.\n\n"
                     "<:ponto:1540777974427553862> Apenas membros com cargos autorizados podem emitir boletins:\n\n"
                     f"<@&{ID_CARGO_P1_BOLETIM}>\n\n"
-                    f"<:ponto:1540777974427553862> O boletim será enviado para <#{CANAL_BOLETINS['9°BPM']}>.\n\n"
+                    f"<:ponto:1540777974427553862> O boletim será enviado para:\n" 
+                    f"<#{CANAL_BOLETINS['9°BPM']}>.\n\n"
                     "<:ponto:1540777974427553862> Qualquer dúvida, solicite ajuda à equipe."
                 ),
                 color=discord.Color.yellow(),
