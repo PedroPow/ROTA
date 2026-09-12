@@ -662,7 +662,7 @@ class MensagemModal(Modal, title="📢 Enviar Mensagem"):
                 f"<:pessoas:1540780605237760050> **Usuário:** {interaction.user.mention}\n\n"
                 f"<:pessoas:1540780605237760050> **ID do usuário:** `{interaction.user.id}`\n\n"
                 f"<:paineladmin:1540780905902374982> **Canal:** {interaction.channel.mention}\n\n"
-                f"<:222:1540799996251865108>  **Anexos:** {qtd_anexos}"
+                f"<:222:1540799996251865108>  **Anexos:** {qtd_anexos}\n\n"
             ),
             color=discord.Color.yellow(),
         )
