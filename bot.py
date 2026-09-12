@@ -1179,7 +1179,7 @@ class SelectCIA(Select):
 
 class DadosPessoaisModal(Modal, title="Registro do Policial"):
     nome = TextInput(label="Nome Completo", required=True, max_length=80)
-    passaporte = TextInput(label="Passaporte", required=True, max_length=20)
+    passaporte = TextInput(label="Passaporte", required=True, max_length=10)
 
     def __init__(self, ticket_id: int, patente_nome: str, patente_ids: list, cia: str):
         super().__init__()
@@ -1189,6 +1189,13 @@ class DadosPessoaisModal(Modal, title="Registro do Policial"):
         self.cia = cia
 
     async def on_submit(self, interaction: discord.Interaction):
+        if not self.passaporte.value.isascii() or not self.passaporte.value.isdecimal():
+            await interaction.response.send_message(
+                embed=embed_ephemeral("O Passaporte/Identificação deve conter apenas números.", "erro"),
+                ephemeral=True,
+            )
+            return
+
         await interaction.response.defer(ephemeral=True)
 
         nome = self.nome.value.strip()
