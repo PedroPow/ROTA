@@ -1237,11 +1237,6 @@ class DadosPessoaisModal(Modal, title="Registro do Policial"):
             value=interaction.user.mention,
             inline=False,
         )
-        embed.add_field(
-            name="<:CRACHA2:1540808930572243004> Aprovado por:",
-            value="Aguardando...",
-            inline=True,
-        )
         
         embed.set_thumbnail(
             url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8b4418&is=6a89f298&hm=ccef0422a39e4382dc5e5b9858c859cb3a0dd81a22eac8f643b85ee6fa955c8f&"
@@ -1365,7 +1360,11 @@ class ConfirmarOuFecharView(View):
 
         embed = interaction.message.embeds[0]
         embed.color = discord.Color.green()
-        embed.description = (embed.description or "") + f"\n\n<:CRACHA2:1540808930572243004> **Aprovado por:** {interaction.user.mention}"
+        embed.add_field(
+            name="<:CRACHA2:1540808930572243004> Aprovado por:",
+            value=interaction.user.mention,
+            inline=False,
+        )
         await interaction.message.edit(embed=embed, view=None)
 
         await interaction.followup.send(embed=embed_status_credencial(aprovado=True), ephemeral=True)
@@ -1424,7 +1423,11 @@ class ConfirmarOuFecharView(View):
 
         embed = interaction.message.embeds[0]
         embed.color = discord.Color.red()
-        embed.description = (embed.description or "") + f"\n\n<:CRACHA3:1540809884424208394> **Recusado por:** {interaction.user.mention}"
+        embed.add_field(
+            name="<:CRACHA3:1540809884424208394> Reprovado por:",
+            value=interaction.user.mention,
+            inline=False,
+        )
         await interaction.message.edit(embed=embed, view=None)
 
         await interaction.followup.send(embed=embed_status_credencial(aprovado=False), ephemeral=True)
