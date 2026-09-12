@@ -609,7 +609,7 @@ async def clearall(interaction: discord.Interaction):
     )
 
     try:
-        await canal.purge(limit=100)
+        await canal.purge(limit=1000)  # Tenta apagar até 10.000 mensagens
     except Exception:
         try:
             await canal.purge()
