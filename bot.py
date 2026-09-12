@@ -245,7 +245,7 @@ class ControleCursoView(View):
                     "Que este certificado represente não apenas a conclusão de uma etapa, mas o fortalecimento do espírito de corpo, da honra policial militar e da missão de servir e proteger a sociedade.\n\n"
                     "O Comando parabeniza pelo empenho demonstrado e incentiva a continuidade no mais alto nível de preparo, mantendo viva a tradição, a disciplina e a excelência operacional.\n\n"
                     f"Curso:\n**`{curso['nome']}`**\n\n"
-                    f"Número do Certificado:\n**`ROTA-{datetime.now().year}-{numero:04d}`**\n\n"
+                    f"Número do Certificado:\n**`9BPM-{datetime.now().year}-{numero:04d}`**\n\n"
                     f"Instrutor Responsável: <@{curso['instrutor_id']}>"
                 ),
                 color=discord.Color.gold(),
@@ -1237,6 +1237,12 @@ class DadosPessoaisModal(Modal, title="Registro do Policial"):
             value=interaction.user.mention,
             inline=False,
         )
+        embed.add_field(
+            name="<:CRACHA2:1540808930572243004> Aprovado por:",
+            value="Aguardando...",
+            inline=True,
+        )
+        
         embed.set_thumbnail(
             url="https://cdn.discordapp.com/attachments/1444735189765849320/1540798683749285998/9_BPM_LOGO.png?ex=6a8b4418&is=6a89f298&hm=ccef0422a39e4382dc5e5b9858c859cb3a0dd81a22eac8f643b85ee6fa955c8f&"
         )
