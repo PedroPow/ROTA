@@ -1793,10 +1793,17 @@ def codigo_inscricao() -> str:
 class InscricaoModal(Modal, title="Ficha de Inscrição - PM"):
     nome = TextInput(label="Nome In-Game", max_length=50)
     idade = TextInput(label="Idade In-Narnia", max_length=10)
-    identificacao = TextInput(label="Identificação (ID)", max_length=20)
+    identificacao = TextInput(label="Identificação (ID)", max_length=10)
     experiencia = TextInput(label="Experiência Operacional", style=discord.TextStyle.paragraph, max_length=500)
 
     async def on_submit(self, interaction: discord.Interaction):
+        if not self.identificacao.value.isascii() or not self.identificacao.value.isdecimal():
+            await interaction.response.send_message(
+                embed=embed_ephemeral("A Identificação (ID) deve conter apenas números.", "erro"),
+                ephemeral=True,
+            )
+            return
+
         dados = carregar_inscricoes()
         bloqueio = bloqueio_inscricao(interaction.user.id, dados)
         if bloqueio:
