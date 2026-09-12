@@ -240,7 +240,7 @@ class ControleCursoView(View):
             embed = discord.Embed(
                 title="<:CERTIFICADO:1540945192150896740> CERTIFICADO DE CONCLUSÃO",
                 description=(
-                    f"O Batalhão Força tática Virtual certifica que o policial <@{aluno['user_id']}> concluiu com êxito o curso **{curso['nome']}**, demonstrando elevado padrão de disciplina, dedicação operacional e comprometimento com a doutrina policial militar.\n\n"
+                    f"O 9° Batalhão Virtual certifica que o policial <@{aluno['user_id']}> concluiu com êxito o curso **{curso['nome']}**, demonstrando elevado padrão de disciplina, dedicação operacional e comprometimento com a doutrina policial militar.\n\n"
                     "Durante o período de instrução, o policial apresentou desempenho compatível com os princípios que regem as unidades de elite, mantendo postura profissional, respeito à hierarquia e constante busca pelo aprimoramento técnico.\n\n"
                     "Que este certificado represente não apenas a conclusão de uma etapa, mas o fortalecimento do espírito de corpo, da honra policial militar e da missão de servir e proteger a sociedade.\n\n"
                     "O Comando parabeniza pelo empenho demonstrado e incentiva a continuidade no mais alto nível de preparo, mantendo viva a tradição, a disciplina e a excelência operacional.\n\n"
