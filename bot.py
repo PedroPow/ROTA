@@ -26,6 +26,7 @@ VERIFY_CHANNEL_ID = 0  # Canal de verificação
 
 ROLE_VERIFY_ID = 1343645401051431017  # Cargo de verificado (CARGO: POLICIA MILITAR)
 ROLE_AUTOROLE_ID = 1345435302285545652  # Cargo de novato (CARGO: SEM SET)
+ROLE_SEM_SSP_ID = 1469536548579049622  # Cargo provisório (CARGO: SEM SSP)
 ADMIN_ROLE_ID = 1449998328334123208  # Cargo de administrador (CARGO: P/1)
 
 PAINEL_CHANNEL_ID = 0  # Canal do painel administrativo
@@ -1342,6 +1343,24 @@ class ConfirmarOuFecharView(View):
         cargo_cia = interaction.guild.get_role(ticket["cargo_cia_id"])
         if cargo_cia:
             cargos.append(cargo_cia)
+
+        cargos_provisorios = [
+            cargo
+            for cargo in (
+                interaction.guild.get_role(ROLE_AUTOROLE_ID),
+                interaction.guild.get_role(ROLE_SEM_SSP_ID),
+            )
+            if cargo and cargo in membro.roles
+        ]
+        if cargos_provisorios:
+            try:
+                await membro.remove_roles(*cargos_provisorios)
+            except Exception:
+                await interaction.followup.send(
+                    embed=embed_ephemeral("Erro ao remover cargos provisórios (verifique permissões do bot).", "erro"),
+                    ephemeral=True,
+                )
+                return
 
         if cargos:
             try:
